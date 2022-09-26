@@ -1,4 +1,0 @@
-class yaml_parser
-{
-    
-}

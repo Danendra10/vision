@@ -20,7 +20,7 @@ int main(int argc, char **argv)
     image_transport::ImageTransport IT(nh);
     // Todo:
     // 1. Apa yang akan terjadi jika hanya ada yuv yang di pub
-    // image_transport::Publisher pub_frame_bgr = IT.advertise("/vision_frame_bgr", 32);
+    image_transport::Publisher pub_frame_bgr = IT.advertise("/vision_frame_bgr", 32);
     image_transport::Publisher pub_frame_yuv = IT.advertise("/vision_frame_yuv", 32);
 
     Mat vision_capture_rgb;
@@ -47,9 +47,9 @@ int main(int argc, char **argv)
         resize(vision_capture_rgb, vision_capture_rgb, Size(g_res_y, g_res_x));
         rotate(vision_capture_rgb, vision_capture_rgb, ROTATE_90_CLOCKWISE);
 
-        // sensor_msgs::ImagePtr msg_frame_bgr =
-        //     cv_bridge::CvImage(std_msgs::Header(), "bgr8", vision_capture_rgb).toImageMsg();
-        // pub_frame_bgr.publish(msg_frame_bgr);
+        sensor_msgs::ImagePtr msg_frame_bgr =
+            cv_bridge::CvImage(std_msgs::Header(), "bgr8", vision_capture_rgb).toImageMsg();
+        pub_frame_bgr.publish(msg_frame_bgr);
 
         Mat frame_yuv;
         cvtColor(vision_capture_rgb, frame_yuv, CV_BGR2YUV);
