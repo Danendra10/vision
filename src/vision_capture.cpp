@@ -18,52 +18,48 @@ int main(int argc, char **argv)
 
     ros::NodeHandle nh;
     image_transport::ImageTransport IT(nh);
-    
-    image_transport::Publisher pub_frame_bgr = IT.advertise("vision_frame_bgr", 32);
-    image_transport::Publisher pub_frame_yuv = IT.advertise("vision_frame_hsv", 32);
+    // Todo:
+    // 1. Apa yang akan terjadi jika hanya ada yuv yang di pub
+    // image_transport::Publisher pub_frame_bgr = IT.advertise("/vision_frame_bgr", 32);
+    image_transport::Publisher pub_frame_yuv = IT.advertise("/vision_frame_yuv", 32);
 
-    Mat myImage;                     
-    VideoCapture cap(0);         
+    Mat vision_capture_rgb;
+    VideoCapture cap("/dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_7C21B0EF-video-index0");
     if (!cap.isOpened())
-    { 
+    {
         cout << "No video stream detected" << endl;
         system("pause");
         return -1;
     }
     while (ros::ok())
-    { 
-        cap >> myImage;
-        if (myImage.empty())
-        { 
+    {
+        cap >> vision_capture_rgb;
+
+        if (vision_capture_rgb.empty())
             break;
-        }
-        // imshow("Video Player", myImage); 
-        char c = (char)waitKey(25);      
+
+        char c = (char)waitKey(25);
+
         if (c == 27)
-        { 
             break;
-        }
-        flip(myImage, myImage, 1);
-        resize(myImage, myImage, Size(g_res_y, g_res_x));
-        rotate(myImage, myImage, ROTATE_90_CLOCKWISE);
 
-        imshow("Video Player", myImage);
+        flip(vision_capture_rgb, vision_capture_rgb, 1);
+        resize(vision_capture_rgb, vision_capture_rgb, Size(g_res_y, g_res_x));
+        rotate(vision_capture_rgb, vision_capture_rgb, ROTATE_90_CLOCKWISE);
 
-        Mat frame_bgr;
-        frame_bgr = myImage.clone();
-        sensor_msgs::ImagePtr msg_frame_bgr =
-            cv_bridge::CvImage(std_msgs::Header(), "bgr8", frame_bgr).toImageMsg();
-        pub_frame_bgr.publish(msg_frame_bgr);
+        // sensor_msgs::ImagePtr msg_frame_bgr =
+        //     cv_bridge::CvImage(std_msgs::Header(), "bgr8", vision_capture_rgb).toImageMsg();
+        // pub_frame_bgr.publish(msg_frame_bgr);
 
         Mat frame_yuv;
-        cvtColor(myImage, frame_yuv, CV_BGR2YUV);
+        cvtColor(vision_capture_rgb, frame_yuv, CV_BGR2YUV);
         sensor_msgs::ImagePtr msg_frame_yuv =
             cv_bridge::CvImage(std_msgs::Header(), "bgr8", frame_yuv).toImageMsg();
         pub_frame_yuv.publish(msg_frame_yuv);
 
         ros::spinOnce();
     }
-    ros::spin();  
+    ros::spin();
 
     cap.release();
     return 0;
