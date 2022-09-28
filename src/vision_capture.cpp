@@ -1,3 +1,7 @@
+/***
+ * Field akan di proses di node ini
+ * **/
+
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <opencv2/opencv.hpp>
@@ -12,6 +16,10 @@
 using namespace cv;
 using namespace std;
 
+boost::mutex mutex_field_raw_threshold;
+
+Mat field_raw_threshold = Mat::zeros(Size(g_res_y, g_res_x), CV_8UC1);
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "vision_capture");
@@ -23,8 +31,9 @@ int main(int argc, char **argv)
     image_transport::Publisher pub_frame_bgr = IT.advertise("/vision_frame_bgr", 32);
     image_transport::Publisher pub_frame_yuv = IT.advertise("/vision_frame_yuv", 32);
 
+    Mat vision_capture_raw;
     Mat vision_capture_rgb;
-    VideoCapture cap("/dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_7C21B0EF-video-index0");
+    VideoCapture cap("/home/danendra/Iris/jiancuk_raceto/src/vision/vid/percobaan.mkv");
     if (!cap.isOpened())
     {
         cout << "No video stream detected" << endl;
@@ -34,6 +43,7 @@ int main(int argc, char **argv)
     while (ros::ok())
     {
         cap >> vision_capture_rgb;
+        // cap >> vision_capture_raw;
 
         if (vision_capture_rgb.empty())
             break;
@@ -46,6 +56,10 @@ int main(int argc, char **argv)
         flip(vision_capture_rgb, vision_capture_rgb, 1);
         resize(vision_capture_rgb, vision_capture_rgb, Size(g_res_y, g_res_x));
         rotate(vision_capture_rgb, vision_capture_rgb, ROTATE_90_CLOCKWISE);
+
+        // vision_capture_rgb = vision_capture_raw(Rect(0, 0, g_res_y * 0.9, g_res_x * 0.9));
+
+        // imshow("Vision Capture", vision_capture_rgb);
 
         sensor_msgs::ImagePtr msg_frame_bgr =
             cv_bridge::CvImage(std_msgs::Header(), "bgr8", vision_capture_rgb).toImageMsg();

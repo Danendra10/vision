@@ -5,8 +5,6 @@
  *  - get obs []
  * */
 
-
-
 #include <angles/angles.h>
 #include <boost/thread/mutex.hpp>
 #include <opencv2/opencv.hpp>
@@ -52,32 +50,32 @@ Mat field_final_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat ball_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat obstacle_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 
-int yMin = 19;
-int uMin = 0;
-int vMin = 151;
-
-int yMax = 193;
-int uMax = 126;
-int vMax = 255;
-
-int yMin_Ball = 19;
-int uMin_Ball = 0;
-int vMin_Ball = 151;
-
-int yMax_Ball = 193;
-int uMax_Ball = 126;
-int vMax_Ball = 255;
-
-int yMin_Line = 19;
-int uMin_Line = 0;
-int vMin_Line = 151;
-
-int yMax_Line = 193;
-int uMax_Line = 126;
-int vMax_Line = 255;
-
 uint16_t largest_contours_area = 0;
 uint16_t largest_contours_index = 0;
+
+//---Cam Vars
+//============
+float g_center_cam_x = g_res_x*0.5;
+float g_center_cam_y = g_res_y*0.5;
+
+//---Ball Vars
+//============
+/**
+ * x have max val of 360
+ * y have max val of 640
+ * we could use uint16_t because it have max val of 65535
+ * 9999 is when the ball is not found
+ * */
+uint16_t g_center_ball_x;
+uint16_t g_center_ball_y;
+uint8_t yuv_thresh[6] = {19,193,0,126,151,255};
+uint8_t g_counter_bola_in;
+uint8_t g_counter_bola_out;
+uint8_t status_bola;
+float g_ball_on_frame_x;
+float g_ball_on_frame_y;
+_Float32x g_ball_on_frame_theta;
+
 
 void CllbkSubFrameBgr(const sensor_msgs::ImageConstPtr &msg);
 void CllbkSubFrameYuv(const sensor_msgs::ImageConstPtr &msg);
@@ -161,47 +159,126 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 {
     // create trackbar to control YUV
     cv::namedWindow("view", cv::WINDOW_AUTOSIZE);
-    cv::createTrackbar("yMin", "view", &yMin, 255);
-    cv::createTrackbar("yMax", "view", &yMax, 255);
-    cv::createTrackbar("uMin", "view", &uMin, 255);
-    cv::createTrackbar("uMax", "view", &uMax, 255);
-    cv::createTrackbar("vMin", "view", &vMin, 255);
-    cv::createTrackbar("vMax", "view", &vMax, 255);
+    // cv::createTrackbar("yMin", "view", &yuv_thresh[0], 255);
+    // cv::createTrackbar("yMax", "view", &yuv_thresh[1], 255);
+    // cv::createTrackbar("uMin", "view", &uMin, 255);
+    // cv::createTrackbar("uMax", "view", &uMax, 255);
+    // cv::createTrackbar("vMin", "view", &vMin, 255);
+    // cv::createTrackbar("vMax", "view", &vMax, 255);
 
-    cv::Scalar lower(yMin, uMin, vMin);
-    cv::Scalar upper(yMax, uMax, vMax);
+    cv::Scalar lower(yuv_thresh[0], yuv_thresh[2], yuv_thresh[4]);
+    cv::Scalar upper(yuv_thresh[1], yuv_thresh[3], yuv_thresh[5]);
 
     cv::inRange(frame_yuv, lower, upper, ball_raw_threshold);
 
-    Mat canny_out;
-    Canny(ball_raw_threshold, canny_out, 100, 200, 3);
+    // findContours(ball_raw_threshold, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
 
-    std::vector<std::vector<Point>> contours;
-    findContours(canny_out, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
+    // get the center x and y of ball
 
-    std::vector<std::vector<Point>> contours_poly(contours.size());
-    std::vector<Rect> boundRect(contours.size());
-    std::vector<Point2f> centers(contours.size());
-    std::vector<float> radius(contours.size());
-    for (size_t i = 0; i < contours.size(); i++)
-    {
-        approxPolyDP(contours[i], contours_poly[i], 3, true);
-        boundRect[i] = boundingRect(contours_poly[i]);
-        minEnclosingCircle(contours_poly[i], centers[i], radius[i]);
-    }
-    Mat drawing = Mat::zeros(canny_out.size(), CV_8UC3);
-    for (size_t i = 0; i < contours.size(); i++)
-    {
-        Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
-        drawContours(drawing, contours_poly, (int)i, color);
-        circle(drawing, centers[i], (int)radius[i], color, 2);
-    }
-    imshow("Contours", drawing);
-    cv::waitKey(30);
+    // Mat canny_out;
+    // Canny(ball_raw_threshold, canny_out, 100, 200, 3);
 
     // std::vector<std::vector<Point>> contours;
-    // std::vector<Vec4i> hierarchy;
-    // findContours(field_raw_threshold, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+    // findContours(canny_out, contours, RETR_TREE, CHAIN_APPROX_SIMPLE);
+
+    // std::vector<std::vector<Point>> contours_poly(contours.size());
+    // std::vector<Rect> boundRect(contours.size());
+    // std::vector<Point2f> centers(contours.size());
+    // std::vector<float> radius(contours.size());
+    // for (size_t i = 0; i < contours.size(); i++)
+    // {
+    //     approxPolyDP(contours[i], contours_poly[i], 3, true);
+    //     boundRect[i] = boundingRect(contours_poly[i]);
+    //     minEnclosingCircle(contours_poly[i], centers[i], radius[i]);
+    // }
+    // Mat drawing = Mat::zeros(canny_out.size(), CV_8UC3);
+    // for (size_t i = 0; i < contours.size(); i++)
+    // {
+    //     Scalar color = Scalar(rng.uniform(0, 256), rng.uniform(0, 256), rng.uniform(0, 256));
+    //     drawContours(drawing, contours_poly, (int)i, color);
+    //     circle(drawing, centers[i], (int)radius[i], color, 2);
+    // }
+    // imshow("Contours", drawing);
+    // cv::waitKey(30);
+
+    //=============================
+
+    //---Search for ball contours
+    //===========================   
+    std::vector<std::vector<Point>> contours;
+    std::vector<Vec4i> hierarchy;
+    findContours(ball_raw_threshold, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+
+    //---Get the biggest contour area
+    //===============================
+    uint16_t largest_area = 0;
+    uint16_t largest_contour_index = 0;
+
+    for (uint16_t i = 0; i < contours.size(); i++) 
+    {    
+        if (contourArea(contours[i], false) > largest_area)
+        {
+            largest_area = contourArea(contours[i], false);
+            largest_contour_index = i;
+        }
+    }
+
+    //---Ball detected safety
+    //=======================
+    if (contours.size())
+    {
+        g_counter_bola_in += 17;
+        g_counter_bola_out = 0;
+    }
+    //---Lost the ball
+    //================
+    else
+    {
+        g_counter_bola_in = 0;
+        g_counter_bola_out += 17;
+    }    
+
+    //---Found the ball
+    //=================
+    if (g_counter_bola_in > 100) // iki asline pisan 100, safety ketika false detect
+        status_bola = 1;
+    // Bola dianggap hilang
+    else if (g_counter_bola_out > 300)
+        status_bola = 0;
+
+    //---Update Ball pos
+    //==================
+    if (status_bola)
+    {
+        //---Get the moments
+        //==================
+        std::vector<Moments> mu(contours.size());
+        for (uint16_t i = 0; i < contours.size(); i++)
+            mu[i] = moments(contours[i], false);
+
+        //---Get the mass centers
+        //=======================
+        std::vector<Point2f> mc(contours.size());
+        for (uint16_t i = 0; i < contours.size(); i++)    
+            mc[i] = Point2f(mu[i].m10 / mu[i].m00, mu[i].m01 / mu[i].m00);        
+
+        //---Update ball pos
+        //==================
+        g_center_ball_x = mc[largest_contour_index].x ;
+        g_center_ball_y = mc[largest_contour_index].y;
+
+        //---Ball pos relative from mid of frame
+        //======================================
+        g_ball_on_frame_x = g_center_ball_x - g_center_cam_x;
+        g_ball_on_frame_y = g_center_cam_y - g_center_ball_y;
+        g_ball_on_frame_theta = angles::to_degrees(atan2f32(g_ball_on_frame_y, g_ball_on_frame_x));
+
+        //---Draw ball pos
+        //================
+        circle(frame_yuv, mc[largest_contour_index], 25, Scalar(0, 0, 255));
+
+        printf("Ball pos: %f | %f | %f\n", g_ball_on_frame_x, g_ball_on_frame_y, g_ball_on_frame_theta);
+    }
 
     // print contour
     //  for (int i = 0; i < contours.size(); i++)
@@ -226,7 +303,8 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     // circle(frame_yuv, ball_center, ball_radius, Scalar(0, 0, 255), 2, 8, 0);
 
-    // cv::imshow("view", field_raw_threshold);
-    // cv::imshow("view 1", frame_yuv);
-    // cv::waitKey(30);
+    cv::imshow("view", ball_raw_threshold);
+    cvtColor(frame_yuv, frame_bgr, cv::COLOR_YUV2BGR);
+    cv::imshow("p_frame_bgr", frame_bgr);
+    cv::waitKey(30);
 }
