@@ -45,11 +45,13 @@ boost::mutex mutex_ball_threshold;
 //---Matrix
 //=========
 Mat frame_yuv = Mat::zeros(g_res_y, g_res_x, CV_8UC3);
+Mat frame_bgr = Mat::zeros(g_res_y, g_res_x, CV_8UC3);
 Mat frame_yuv_field = Mat::zeros(g_res_y, g_res_x, CV_8UC3);
 Mat frame_yuv_ball = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat field_final_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat ball_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat frame_yuv_obs = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
+Mat raw_frame_yuv_obs = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 
 uint16_t largest_contours_area = 0;
 uint16_t largest_contours_index = 0;
@@ -88,7 +90,7 @@ vector<Vec4i> obs_hierarchy;
 unsigned short int obs_buffer[50], limit_buffer[50];
 unsigned short int obs[50], limit[50];
 
-uint16_t threshold_size_obs;
+uint16_t largest_threshold_size_obs;
 
 //---Container
 //============
@@ -143,6 +145,16 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     inRange(frame_yuv, lower_field, upper_field, frame_yuv_field);
 
+    //---Ignore the center of Cam
+    //===========================
+    //make a filled circle
+
+    // circle(frame_yuv_field, Point(g_center_cam_x, g_center_cam_y), 100, Scalar(255, 0, 0), -1);
+    // rectangle(frame_yuv_field, Point(g_center_cam_x - 10, g_center_cam_y - 10), Point(g_center_cam_x + 10, g_center_cam_y + 10), Scalar(0, 0, 0), -1);
+
+    // imshow("Field Threshold", frame_yuv_field);
+
+
     //==================
     //---Ball Threshold
     //==================
@@ -170,51 +182,87 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     bitwise_not(frame_yuv_obs, frame_yuv_obs);
 
+    // bitwise_and(frame_yuv_obs, frame_yuv_field, frame_yuv_obs);
+
+    //---Ignore the center
+    //====================
+    circle(frame_yuv_obs, Point(g_center_cam_x, g_center_cam_y), 60, Scalar(0, 0, 0), -1);
+
     erode(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
 
     dilate(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
+    imshow("Field Threshold", frame_yuv_obs);
 
     mutex_field_raw_threshold.unlock();
     mutex_field_final_threshold.unlock();
     mutex_ball_threshold.unlock();
 
+    raw_frame_yuv_obs = frame_yuv_obs.clone();
+
+    mutex_frame_bgr.lock();
+    cvtColor(frame_yuv, frame_bgr, CV_YUV2BGR);
+    mutex_frame_bgr.unlock();
+    frame_yuv_obs = Scalar(0);
+
     //===========================
     //---Search for contours
     //===========================
     findContours(frame_yuv_ball, ball_contours, ball_hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
-    findContours(frame_yuv_obs, obs_contours, obs_hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+    findContours(raw_frame_yuv_obs, obs_contours, obs_hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
 
     //---Get the biggest contour area for obs
     //=======================================
     for (unsigned int i = 0; i < obs_contours.size(); i++)
     {
-        if (contourArea(obs_contours[i]) > threshold_size_obs)
+        if (contourArea(obs_contours[i]) > largest_threshold_size_obs)
         {
+            largest_threshold_size_obs = contourArea(obs_contours[i]);
             drawContours(frame_yuv_obs, obs_contours, i, Scalar(255), -1);
-            drawContours(display_obs, obs_contours, i, Scalar(0, 255, 255), 1);
+            drawContours(frame_bgr, obs_contours, i, Scalar(0, 255, 255), 1);
         }
     }
-
-    imshow("frame_yuv_obs", display_obs);
 
     //---Count the obstacle's distance
     //--- from the center of the cam
     //================================
-    // for (uint8_t angles = 0; angles < 50; angles++)
-    // {
+    for (uint8_t angles = 0; angles < 60; angles++)
+    {
 
-    //     uint16_t pixel = 0;
-    //     int16_t px_x = g_center_cam_x;
-    //     int16_t px_y = g_center_cam_y;
+        uint16_t pixel = 0;
+        int16_t pixel_x = g_center_cam_x;
+        int16_t pixel_y = g_center_cam_y;
 
-    //     while (px_x >= 0 &&
-    //            px_y >= 0 &&
-    //            px_x < g_res_x &&
-    //            px_y < g_res_y)
-    //     {
-    //         obs_buffer[i] = pixel_to_cm(pixel);
-    //     }
-    // }
+        while (pixel_x >= 0 &&
+               pixel_y >= 0 &&
+               pixel_x < g_res_x &&
+               pixel_y < g_res_y)
+        {
+            // draw small circle every iterations
+            circle(frame_yuv, Point(pixel_x, pixel_y), 1, Scalar(0, 255, 0), 1);
+            printf("pixel_x: %d, pixel_y: %d || pixel : %d || angles : %d\n", pixel_x, pixel_y, pixel, angles);
+            // obs_buffer[i] = pixel_to_cm(pixel);
+            if (frame_yuv_obs.at<unsigned char>(Point(pixel_x, pixel_y)) == 255 && pixel_x > g_center_cam_x + 50 && pixel_x < g_center_cam_x - 50 && pixel_y > g_center_cam_y + 50 && pixel_y < g_center_cam_y - 50)
+            {
+                circle(frame_yuv, Point(pixel_x, pixel_y), 2, Scalar(255, 255, 0), 1);
+                break;
+            }
+            pixel++;
+            pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6)));
+            pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6)));
+            // if (angles >= 0 && angles <= 15)
+            // {
+            //     pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6))) + 50;
+            //     pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6))) - 50;
+            // }
+            // else
+            // {
+            //     pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6))) - 50;
+            //     pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6))) - 50;
+            // }
+        }
+        if (pixel_x < 0 || pixel_y < 0 || pixel_x >= g_res_x || pixel_y >= g_res_y)
+            obs_buffer[angles] = 9999;
+    }
 
     //====================================================================================
 
@@ -288,9 +336,9 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
         //---Draw ball pos
         //================
-        circle(frame_yuv, mc[largest_contour_index], ball_radius, Scalar(0, 0, 255));
+        circle(frame_bgr, mc[largest_contour_index], ball_radius, Scalar(0, 0, 255));
 
-        printf("Ball pos: %f | %f | %f\n", g_ball_on_frame_x, g_ball_on_frame_y, g_ball_on_frame_theta);
+        // printf("Ball pos: %f | %f | %f\n", g_ball_on_frame_x, g_ball_on_frame_y, g_ball_on_frame_theta);
     }
 
     // imshow("view ball", frame_yuv_ball);
@@ -298,17 +346,18 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     //---Vertical Line
     //================
-    line(frame_yuv, Point(g_center_cam_x, 0), Point(g_center_cam_x, g_center_cam_y - 50), Scalar(0, 255, 0));
-    line(frame_yuv, Point(g_center_cam_x, g_center_cam_y + 50), Point(g_center_cam_x, g_res_y), Scalar(0, 255, 0));
+    line(frame_bgr, Point(g_center_cam_x, 0), Point(g_center_cam_x, g_center_cam_y - 50), Scalar(0, 255, 0));
+    line(frame_bgr, Point(g_center_cam_x, g_center_cam_y + 50), Point(g_center_cam_x, g_res_y), Scalar(0, 255, 0));
 
     //---Horizontal Line
     //==================
-    line(frame_yuv, Point(0, g_center_cam_y), Point(g_center_cam_x - 50, g_center_cam_y), Scalar(0, 255, 0));
-    line(frame_yuv, Point(g_center_cam_x + 50, g_center_cam_y), Point(g_res_x, g_center_cam_y), Scalar(0, 255, 0));
+    line(frame_bgr, Point(0, g_center_cam_y), Point(g_center_cam_x - 50, g_center_cam_y), Scalar(0, 255, 0));
+    line(frame_bgr, Point(g_center_cam_x + 50, g_center_cam_y), Point(g_res_x, g_center_cam_y), Scalar(0, 255, 0));
 
     //---Circle
     //=========
-    circle(frame_yuv, Point(g_center_cam_x, g_center_cam_y), 50, Scalar(0, 255, 0));
-    imshow("view yuv", frame_yuv);
+    circle(frame_bgr, Point(g_center_cam_x, g_center_cam_y), 50, Scalar(0, 255, 0));
+    // imshow("frame bgr", frame_bgr);
+    // imshow("view yuv", frame_yuv);
     waitKey(30);
 }

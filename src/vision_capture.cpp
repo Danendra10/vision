@@ -1,7 +1,3 @@
-/***
- * Field akan di proses di node ini
- * **/
-
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <opencv2/opencv.hpp>
@@ -54,7 +50,6 @@ int uMin = 127;
 int uMax = 255;
 int vMin = 0;
 int vMax = 98;
-
 
 int main(int argc, char **argv)
 {
@@ -110,22 +105,32 @@ int main(int argc, char **argv)
 }
 
 void CllbkTim50Hz(const ros::TimerEvent &event)
-{    
+{
     //--Store the captured to matrix
     //==============================
-    cap >> vision_capture_rgb;
+    cap >> vision_capture_rgb;    
 
     // vision_capture_raw = vision_capture_rgb.clone();
+    
+    // vision_capture_raw = vision_capture_rgb.clone();
 
+    // flip(vision_capture_raw, vision_capture_raw, 1);
+    // imshow("view3", vision_capture_raw);
+    // vision_capture_raw = vision_capture_raw(Rect(0, 100, g_res_x, g_res_y * 0.65));
+    // resize(vision_capture_raw, vision_capture_raw, Size(g_res_y, g_res_x));
+    // rotate(vision_capture_raw, vision_capture_raw, ROTATE_90_CLOCKWISE);
+    // imshow("view after", vision_capture_raw);
     //---Flip
     //=======
     flip(vision_capture_rgb, vision_capture_rgb, 1);
+    // vision_capture_rgb = vision_capture_rgb(Rect(0, 100, g_res_x, g_res_y * 0.65));
     resize(vision_capture_rgb, vision_capture_rgb, Size(g_res_y, g_res_x));
     rotate(vision_capture_rgb, vision_capture_rgb, ROTATE_90_CLOCKWISE);
 
+
     cvtColor(vision_capture_rgb, vision_capture_yuv, CV_BGR2YUV);
 
-    namedWindow("view", WINDOW_AUTOSIZE);
+    // namedWindow("view", WINDOW_AUTOSIZE);
     // createTrackbar("yMin", "view", &yMin, 255);
     // createTrackbar("yMax", "view", &yMax, 255);
     // createTrackbar("uMin", "view", &uMin, 255);
@@ -135,8 +140,9 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     // imshow("view", vision_capture_yuv);
     // imshow("view2", field_raw_threshold);
-    // imshow("view3", vision_capture_rgb);
-    // waitKey(1);
+    
+    // imshow("RGB", vision_capture_yuv);
+    waitKey(1);
 
     //---Publish Field Only
     //=====================
@@ -144,11 +150,9 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         cv_bridge::CvImage(std_msgs::Header(), "bgr8", vision_capture_yuv).toImageMsg();
     pub_frame_field_yuv.publish(msg_frame_field_yuv);
 
-
-    
     // //---Field
     // //========
     // mutex_field_raw_threshold.lock();
-    
+
     // mutex_field_raw_threshold.unlock();
 }
