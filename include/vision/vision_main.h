@@ -6,6 +6,7 @@
 
 #include "vision/config.h"
 
+using namespace std;
 using namespace cv;
 
 //---Camera Resolution
@@ -23,6 +24,16 @@ void LoadCameraConfig(std::string camera_name, std::string _param, short int _va
     char _param_char[_param.length() + 1];
     system(_param_char);
 }
+
+// float pixel_to_cm(float _pixel)
+// {
+//     // Nilai regresi diambil dari config/vision.yaml
+//     double result = 0;
+//     for (int i = 0; i < regresi.size(); i++)
+//         result += (regresi[i] * pow(_pixel, (double)i));
+
+//     return result;
+// }
 
 // void LoadConfig(uint8_t status, uint8_t *yuv_thresh)
 // {

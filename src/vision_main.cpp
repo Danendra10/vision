@@ -49,15 +49,15 @@ Mat frame_yuv_field = Mat::zeros(g_res_y, g_res_x, CV_8UC3);
 Mat frame_yuv_ball = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat field_final_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat ball_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
-Mat obstacle_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
+Mat frame_yuv_obs = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 
 uint16_t largest_contours_area = 0;
 uint16_t largest_contours_index = 0;
 
 //---Cam Vars
 //============
-float g_center_cam_x = g_res_x * 0.5;
-float g_center_cam_y = g_res_y * 0.5;
+float g_center_cam_x = g_res_x * 0.5 + 3;
+float g_center_cam_y = g_res_y * 0.5 - 10;
 
 //---Ball Vars
 //============
@@ -67,16 +67,34 @@ float g_center_cam_y = g_res_y * 0.5;
  * we could use uint16_t because it have max val of 65535
  * 9999 is when the ball is not found
  * */
+vector<vector<Point>> ball_contours;
+vector<Vec4i> ball_hierarchy;
 uint16_t g_center_ball_x;
 uint16_t g_center_ball_y;
 uint8_t yuv_ball_thresh[6] = {19, 193, 0, 126, 151, 255};
-uint8_t yuv_field_thresh[6] = {93,175,127,255,0,98};
+uint8_t yuv_field_thresh[6] = {93, 175, 127, 255, 0, 98};
 uint8_t g_counter_bola_in;
 uint8_t g_counter_bola_out;
 uint8_t status_bola;
 float g_ball_on_frame_x;
 float g_ball_on_frame_y;
 _Float32x g_ball_on_frame_theta;
+
+//---Obstacle vars
+//================
+vector<vector<Point>> obs_contours;
+vector<Vec4i> obs_hierarchy;
+
+unsigned short int obs_buffer[50], limit_buffer[50];
+unsigned short int obs[50], limit[50];
+
+uint16_t threshold_size_obs;
+
+//---Container
+//============
+Mat display_obs = Mat::zeros(Size(g_res_x, g_res_y), CV_8UC3);
+
+//============================================================
 
 void CllbkSubFrameBgr(const sensor_msgs::ImageConstPtr &msg);
 void CllbkSubFrameYuv(const sensor_msgs::ImageConstPtr &msg);
@@ -96,30 +114,7 @@ int main(int argc, char **argv)
 
     //---Subscriber
     //======================
-    // sub_frame_bgr = IT.subscribe("/vision_frame_bgr", 32, CllbkSubFrameBgr);
     sub_frame_field_yuv = IT.subscribe("/vision_yuv", 32, CllbkSubFrameYuv);
-    // sub_field_raw_threshold = IT.subscribe("vision_field_raw_threshold", 32, &field_raw_threshold_callback);
-    // sub_field_final_threshold = IT.subscribe("vision_field_final_threshold", 32, &field_final_threshold_callback);
-    // sub_ball_threshold = IT.subscribe("vision_ball_threshold", 32, &ball_threshold_callback);
-
-    //---Publisher
-    //======================
-    // pub_raw_threshold = IT.advertise("vision_raw_threshold", 32);
-    // pub_final_threshold = IT.advertise("vision_final_threshold", 32);
-    // pub_display_out = IT.advertise("vision_display_out", 32);
-
-    // pub_obs = nh.advertise<std_msgs::UInt16MultiArray>("vision_obs", 32);
-
-    //---Timer
-    //======================
-    // timer_50hz = nh.createTimer(ros::Duration(0.02), &CllbkTim50Hz);
-
-    // show the p_frame_bgr
-    // while (ros::ok())
-    // {
-    //     namedWindow("p_frame_bgr", WINDOW_AUTOSIZE);
-    //     imshow("p_frame_bgr", frame_bgr);
-    // }
 
     MTS.spin();
 }
@@ -139,8 +134,8 @@ void CllbkSubFrameYuv(const sensor_msgs::ImageConstPtr &msg)
 }
 
 void CllbkTim50Hz(const ros::TimerEvent &event)
-{   
-    //================== 
+{
+    //==================
     //---Field Threshold
     //==================
     Scalar lower_field(yuv_field_thresh[0], yuv_field_thresh[2], yuv_field_thresh[4]);
@@ -155,33 +150,91 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     Scalar lower_ball(yuv_ball_thresh[0], yuv_ball_thresh[2], yuv_ball_thresh[4]);
     Scalar upper_ball(yuv_ball_thresh[1], yuv_ball_thresh[3], yuv_ball_thresh[5]);
 
-    inRange(frame_yuv, lower_ball, upper_ball, frame_yuv_ball); 
+    inRange(frame_yuv, lower_ball, upper_ball, frame_yuv_ball);
 
-    //=============================
+    //=====================
+    //---Obstacle Threshold
+    //=====================
 
-    //---Search for ball contours
+    mutex_field_raw_threshold.lock();
+    mutex_field_final_threshold.lock();
+    mutex_ball_threshold.lock();
+
+    /**
+     * Combine the field and ball together
+     * Using or because we want to get the obstacle even if there is no ball
+     * Using not to get it's inverse
+     * Using and
+     * */
+    bitwise_or(frame_yuv_field, frame_yuv_ball, frame_yuv_obs);
+
+    bitwise_not(frame_yuv_obs, frame_yuv_obs);
+
+    erode(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
+
+    dilate(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
+
+    mutex_field_raw_threshold.unlock();
+    mutex_field_final_threshold.unlock();
+    mutex_ball_threshold.unlock();
+
     //===========================
-    std::vector<std::vector<Point>> contours;
-    std::vector<Vec4i> hierarchy;
-    findContours(frame_yuv_ball, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+    //---Search for contours
+    //===========================
+    findContours(frame_yuv_ball, ball_contours, ball_hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+    findContours(frame_yuv_obs, obs_contours, obs_hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
 
-    //---Get the biggest contour area
-    //===============================
+    //---Get the biggest contour area for obs
+    //=======================================
+    for (unsigned int i = 0; i < obs_contours.size(); i++)
+    {
+        if (contourArea(obs_contours[i]) > threshold_size_obs)
+        {
+            drawContours(frame_yuv_obs, obs_contours, i, Scalar(255), -1);
+            drawContours(display_obs, obs_contours, i, Scalar(0, 255, 255), 1);
+        }
+    }
+
+    imshow("frame_yuv_obs", display_obs);
+
+    //---Count the obstacle's distance
+    //--- from the center of the cam
+    //================================
+    // for (uint8_t angles = 0; angles < 50; angles++)
+    // {
+
+    //     uint16_t pixel = 0;
+    //     int16_t px_x = g_center_cam_x;
+    //     int16_t px_y = g_center_cam_y;
+
+    //     while (px_x >= 0 &&
+    //            px_y >= 0 &&
+    //            px_x < g_res_x &&
+    //            px_y < g_res_y)
+    //     {
+    //         obs_buffer[i] = pixel_to_cm(pixel);
+    //     }
+    // }
+
+    //====================================================================================
+
+    //---Get the biggest contour area for ball
+    //========================================
     uint16_t largest_area = 0;
     uint16_t largest_contour_index = 0;
 
-    for (uint16_t i = 0; i < contours.size(); i++)
+    for (uint16_t i = 0; i < ball_contours.size(); i++)
     {
-        if (contourArea(contours[i], false) > largest_area)
+        if (contourArea(ball_contours[i], false) > largest_area)
         {
-            largest_area = contourArea(contours[i], false);
+            largest_area = contourArea(ball_contours[i], false);
             largest_contour_index = i;
         }
     }
 
     //---Ball detected safety
     //=======================
-    if (contours.size())
+    if (ball_contours.size())
     {
         g_counter_bola_in += 17;
         g_counter_bola_out = 0;
@@ -196,9 +249,8 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     //---Found the ball
     //=================
-    if (g_counter_bola_in > 100) // iki asline pisan 100, safety ketika false detect
+    if (g_counter_bola_in > 100)
         status_bola = 1;
-    // Bola dianggap hilang
     else if (g_counter_bola_out > 300)
         status_bola = 0;
 
@@ -208,14 +260,14 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     {
         //---Get the moments
         //==================
-        std::vector<Moments> mu(contours.size());
-        for (uint16_t i = 0; i < contours.size(); i++)
-            mu[i] = moments(contours[i], false);
+        vector<Moments> mu(ball_contours.size());
+        for (uint16_t i = 0; i < ball_contours.size(); i++)
+            mu[i] = moments(ball_contours[i], false);
 
         //---Get the mass centers
         //=======================
-        std::vector<Point2f> mc(contours.size());
-        for (uint16_t i = 0; i < contours.size(); i++)
+        vector<Point2f> mc(ball_contours.size());
+        for (uint16_t i = 0; i < ball_contours.size(); i++)
             mc[i] = Point2f(mu[i].m10 / mu[i].m00, mu[i].m01 / mu[i].m00);
 
         //---Update ball pos
@@ -227,12 +279,12 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         //======================================
         g_ball_on_frame_x = g_center_ball_x - g_center_cam_x;
         g_ball_on_frame_y = g_center_cam_y - g_center_ball_y;
-        g_ball_on_frame_theta = atan2f32(g_ball_on_frame_y, g_ball_on_frame_x);
+        g_ball_on_frame_theta = atan2(g_ball_on_frame_y, g_ball_on_frame_x);
 
         //---Get Radius
         //=============
         static float ball_radius;
-        minEnclosingCircle(contours[largest_contour_index], mc[largest_contour_index], ball_radius);        
+        minEnclosingCircle(ball_contours[largest_contour_index], mc[largest_contour_index], ball_radius);
 
         //---Draw ball pos
         //================
@@ -241,8 +293,22 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         printf("Ball pos: %f | %f | %f\n", g_ball_on_frame_x, g_ball_on_frame_y, g_ball_on_frame_theta);
     }
 
-    imshow("view ball", frame_yuv_ball);
-    imshow("view field", frame_yuv_field);
+    // imshow("view ball", frame_yuv_ball);
+    // imshow("view field", frame_yuv_field);
+
+    //---Vertical Line
+    //================
+    line(frame_yuv, Point(g_center_cam_x, 0), Point(g_center_cam_x, g_center_cam_y - 50), Scalar(0, 255, 0));
+    line(frame_yuv, Point(g_center_cam_x, g_center_cam_y + 50), Point(g_center_cam_x, g_res_y), Scalar(0, 255, 0));
+
+    //---Horizontal Line
+    //==================
+    line(frame_yuv, Point(0, g_center_cam_y), Point(g_center_cam_x - 50, g_center_cam_y), Scalar(0, 255, 0));
+    line(frame_yuv, Point(g_center_cam_x + 50, g_center_cam_y), Point(g_res_x, g_center_cam_y), Scalar(0, 255, 0));
+
+    //---Circle
+    //=========
+    circle(frame_yuv, Point(g_center_cam_x, g_center_cam_y), 50, Scalar(0, 255, 0));
     imshow("view yuv", frame_yuv);
     waitKey(30);
 }
