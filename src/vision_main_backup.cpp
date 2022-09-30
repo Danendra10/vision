@@ -94,30 +94,16 @@ Mat display_field = Mat::zeros(Size(g_res_x, g_res_y), CV_8UC3);
 
 //============================================================
 
-//---Prototypes
-//=============
 void CllbkSubFrameBgr(const sensor_msgs::ImageConstPtr &msg);
 void CllbkSubFrameYuv(const sensor_msgs::ImageConstPtr &msg);
-void CllbkTim50Hz(const ros::TimerEvent &event);
+// void CllbkTim50Hz(const ros::TimerEvent &event);
 float pixel_to_cm(float _pixel);
-
-//---Iterator
-//===========
-uint16_t i;
-uint8_t frame_angle;
 
 RNG rng(12345);
 
 //---Regression
 //=============
-vector<double> regresi = {
-    2.1144972037850021e+003,
-    -1.2529810711304636e+002,
-    3.0395881121524386e+000,
-    -3.8247974657217687e-002,
-    2.6590340135171527e-004,
-    -9.7049198872430191e-007,
-    1.4626257536892665e-009};
+vector<double> regresi;
 
 //---Odom
 //=======
@@ -133,7 +119,7 @@ int main(int argc, char **argv)
     ros::MultiThreadedSpinner MTS;
     image_transport::ImageTransport IT(nh);
 
-    timer_50hz = nh.createTimer(ros::Duration(0.02), CllbkTim50Hz);
+    // timer_50hz = nh.createTimer(ros::Duration(0.02), CllbkTim50Hz);
 
     //---Subscriber
     //======================
@@ -171,7 +157,6 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     raw_field_threshold = frame_yuv_field.clone();
 
     mutex_frame_gray.lock();
-    cvtColor(frame_yuv, frame_bgr, COLOR_YUV2BGR);
     cvtColor(frame_bgr, field_gray, COLOR_BGR2GRAY);
     mutex_frame_gray.unlock();
 
@@ -185,6 +170,15 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     bitwise_and(frame_yuv_field, field_gray, field_gray);
     adaptiveThreshold(field_gray, field_gray, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 99, 0);
     bitwise_or(field_gray, raw_field_threshold, raw_field_threshold);
+
+    //---Ignore the center of Cam
+    //===========================
+    // make a filled circle
+
+    // circle(frame_yuv_field, Point(g_center_cam_x, g_center_cam_y), 100, Scalar(255, 0, 0), -1);
+    // rectangle(frame_yuv_field, Point(g_center_cam_x - 10, g_center_cam_y - 10), Point(g_center_cam_x + 10, g_center_cam_y + 10), Scalar(0, 0, 0), -1);
+
+    // imshow("Field Threshold", frame_yuv_field);
 
     //==================
     //---Ball Threshold
@@ -207,6 +201,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
      * Combine the field and ball together
      * Using or because we want to get the obstacle even if there is no ball
      * Using not to get it's inverse
+     * Using and
      * */
     // bitwise_or(frame_yuv_field, frame_yuv_ball, frame_yuv_obs);
     bitwise_or(raw_field_threshold, frame_yuv_ball, frame_yuv_obs);
@@ -220,6 +215,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     mutex_field_raw_threshold.unlock();
     mutex_field_final_threshold.unlock();
     mutex_ball_threshold.unlock();
+    // imshow("1", frame_yuv_obs);
 
     //---Ignore the center
     //====================
@@ -228,35 +224,32 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     erode(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
 
     dilate(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
+    // imshow("Obs Threshold", frame_yuv_obs);
+    // imshow("Frame field", raw_field_threshold);
 
     raw_frame_yuv_obs = frame_yuv_obs.clone();
+    
 
     mutex_frame_bgr.lock();
     cvtColor(frame_yuv, frame_bgr, CV_YUV2BGR);
     display_obs = frame_bgr.clone();
     mutex_frame_bgr.unlock();
-
     frame_yuv_obs = Scalar(0);
 
     //===========================
     //---Search for contours
     //===========================
-
-    //---Ball
-    //=======
     findContours(frame_yuv_ball, ball_contours, ball_hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
-
-    //---Obs
-    //======
     findContours(raw_frame_yuv_obs, obs_contours, obs_hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
 
     //=======================================
     //---Get the biggest contour area for obs
     //=======================================
-    for (i = 0; i < obs_contours.size(); i++)
+    for (unsigned int i = 0; i < obs_contours.size(); i++)
     {
-        if (contourArea(obs_contours[i]) > 1000)
+        if (contourArea(obs_contours[i]) > largest_threshold_size_obs)
         {
+            largest_threshold_size_obs = contourArea(obs_contours[i]);
             drawContours(frame_yuv_obs, obs_contours, i, Scalar(255), -1);
             drawContours(display_obs, obs_contours, i, Scalar(0, 255, 255), 1);
         }
@@ -278,14 +271,21 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
                pixel_y < g_res_y)
         {
             obs_buffer[angles] = pixel_to_cm(pixel);
+            // draw small circle every iterations
+            circle(frame_yuv, Point(pixel_x, pixel_y), 1, Scalar(0, 255, 0), 1);
+            // printf("pixel_x: %d, pixel_y: %d || pixel : %d || angles : %d\n", pixel_x, pixel_y, pixel, angles);
+            // obs_buffer[i] = pixel_to_cm(pixel);
+            // printf("%d\n", frame_yuv_obs.at<unsigned char>(Point(pixel_x, pixel_y)));
+            // imshow("obs", frame_yuv_obs);
             if (frame_yuv_obs.at<unsigned char>(Point(pixel_x, pixel_y)) == 255)
             {
+                // printf("ketemu\n");
                 circle(display_obs, Point(pixel_x, pixel_y), 2, Scalar(255, 255, 0), 1);
                 break;
             }
             pixel++;
             pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6)));
-            pixel_y = g_center_cam_y - (pixel * sin(angles::from_degrees((float)angles * 6)));
+            pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6)));
         }
         if (pixel_x < 0 || pixel_y < 0 || pixel_x >= g_res_x || pixel_y >= g_res_y)
             obs_buffer[angles] = 9999;
@@ -295,19 +295,19 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         {
             limit_buffer[angles] = pixel_to_cm(pixel);
 
-            if (frame_yuv_field.at<unsigned char>(Point(pixel_x, pixel_y)) == 0)
+            if(frame_yuv_field.at<unsigned char>(Point(pixel_x, pixel_y)) == 0)
                 break;
-
+            
             pixel++;
             pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6)));
-            pixel_y = g_center_cam_y - (pixel * sin(angles::from_degrees((float)angles * 6)));
+            pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6)));
         }
         if (pixel_x < 0 || pixel_y < 0 || pixel_x >= g_res_x || pixel_y >= g_res_y)
             limit_buffer[angles] = 9999;
         mutex_obs_final_threshold.unlock();
     }
 
-    for (frame_angle = 0; frame_angle < 60; frame_angle++)
+    for(uint8_t frame_angle = 0; frame_angle < 60; frame_angle++)
     {
         float field_angle = frame_angle * 6 + g_odom_theta - 90;
         while (field_angle >= 360)
@@ -315,17 +315,18 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         while (field_angle < 0)
             field_angle += 360;
 
-        obs_buffer[(int)(field_angle * 0.1667)] = obs_buffer[frame_angle];
-        limit_buffer[(int)(field_angle * 0.1667)] = limit_buffer[frame_angle];
+        obs_buffer[(int)(field_angle/6)] = obs_buffer[frame_angle];
+        limit_buffer[(int)(field_angle/6)] = limit_buffer[frame_angle];
     }
 
-    //========================================
+    //====================================================================================
+
     //---Get the biggest contour area for ball
     //========================================
     uint16_t largest_area = 0;
     uint16_t largest_contour_index = 0;
 
-    for (i = 0; i < ball_contours.size(); i++)
+    for (uint16_t i = 0; i < ball_contours.size(); i++)
     {
         if (contourArea(ball_contours[i], false) > largest_area)
         {
@@ -363,13 +364,13 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         //---Get the moments
         //==================
         vector<Moments> mu(ball_contours.size());
-        for (i = 0; i < ball_contours.size(); i++)
+        for (uint16_t i = 0; i < ball_contours.size(); i++)
             mu[i] = moments(ball_contours[i], false);
 
         //---Get the mass centers
         //=======================
         vector<Point2f> mc(ball_contours.size());
-        for (i = 0; i < ball_contours.size(); i++)
+        for (uint16_t i = 0; i < ball_contours.size(); i++)
             mc[i] = Point2f(mu[i].m10 / mu[i].m00, mu[i].m01 / mu[i].m00);
 
         //---Update ball pos
@@ -395,16 +396,23 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         // printf("Ball pos: %f | %f | %f\n", g_ball_on_frame_x, g_ball_on_frame_y, g_ball_on_frame_theta);
     }
 
-    //---Draw Line
-    //============
-    line(frame_bgr, Point(g_center_cam_x, 0), Point(g_center_cam_x, g_res_y), Scalar(0, 255, 0), 1);
-    line(frame_bgr, Point(0, g_center_cam_y), Point(g_res_x, g_center_cam_y), Scalar(0, 255, 0), 1);
+    // imshow("view ball", frame_yuv_ball);
+    // imshow("view field", frame_yuv_field);
+
+    //---Vertical Line
+    //================
+    // line(frame_bgr, Point(g_center_cam_x, 0), Point(g_center_cam_x, g_center_cam_y - 50), Scalar(0, 255, 0));
+    // line(frame_bgr, Point(g_center_cam_x, g_center_cam_y + 50), Point(g_center_cam_x, g_res_y), Scalar(0, 255, 0));
+
+    //---Horizontal Line
+    //==================
+    line(frame_bgr, Point(0, g_center_cam_y), Point(g_center_cam_x, g_center_cam_y), Scalar(0, 255, 0));
+    line(frame_bgr, Point(g_center_cam_x , g_center_cam_y), Point(g_res_x, g_center_cam_y), Scalar(0, 255, 0));
 
     //---Circle
     //=========
     circle(frame_bgr, Point(g_center_cam_x, g_center_cam_y), 70, Scalar(0, 255, 0));
     imshow("frame bgr", frame_bgr);
-    imshow("display obs", display_obs);
     // imshow("view yuv", frame_yuv);
     // imshow("frame yuv obs", frame_yuv_obs);
     // imshow("raw_frame_yuv_obs", raw_frame_yuv_obs);
