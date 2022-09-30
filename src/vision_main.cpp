@@ -3,19 +3,8 @@
  *  - get ball [v]
  *  - get field [v]
  *  - get obs []
+ * obs masi bermasalah
  * */
-
-#include <angles/angles.h>
-#include <boost/thread/mutex.hpp>
-#include <opencv2/opencv.hpp>
-#include <opencv2/highgui.hpp>
-#include <ros/ros.h>
-#include <cv_bridge/cv_bridge.h>
-#include <image_transport/image_transport.h>
-#include <geometry_msgs/Pose2D.h>
-#include <std_msgs/UInt16MultiArray.h>
-#include <vector>
-
 #include "vision/vision_main.h"
 
 //---Timer
@@ -37,9 +26,11 @@ image_transport::Publisher pub_display_out;
 ros::Publisher pub_obs;
 
 boost::mutex mutex_frame_bgr;
+boost::mutex mutex_frame_gray;
 boost::mutex mutex_frame_yuv;
 boost::mutex mutex_field_raw_threshold;
 boost::mutex mutex_field_final_threshold;
+boost::mutex mutex_obs_final_threshold;
 boost::mutex mutex_ball_threshold;
 
 //---Matrix
@@ -49,6 +40,7 @@ Mat frame_bgr = Mat::zeros(g_res_y, g_res_x, CV_8UC3);
 Mat frame_yuv_field = Mat::zeros(g_res_y, g_res_x, CV_8UC3);
 Mat frame_yuv_ball = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat field_final_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
+Mat raw_field_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat ball_threshold = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat frame_yuv_obs = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
 Mat raw_frame_yuv_obs = Mat::zeros(g_res_y, g_res_x, CV_8UC1);
@@ -58,8 +50,10 @@ uint16_t largest_contours_index = 0;
 
 //---Cam Vars
 //============
-float g_center_cam_x = g_res_x * 0.5 + 3;
-float g_center_cam_y = g_res_y * 0.5 - 10;
+int8_t g_cam_offset_x = -10;
+int8_t g_cam_offset_y = -20;
+float g_center_cam_x = g_res_x * 0.5 + g_cam_offset_x;
+float g_center_cam_y = g_res_y * 0.5 + g_cam_offset_y;
 
 //---Ball Vars
 //============
@@ -73,36 +67,48 @@ vector<vector<Point>> ball_contours;
 vector<Vec4i> ball_hierarchy;
 uint16_t g_center_ball_x;
 uint16_t g_center_ball_y;
-uint8_t yuv_ball_thresh[6] = {19, 193, 0, 126, 151, 255};
-uint8_t yuv_field_thresh[6] = {93, 175, 127, 255, 0, 98};
+uint8_t yuv_ball_thresh[6] = {0, 255, 0, 255, 159, 255};
+uint8_t yuv_field_thresh[6] = {81, 255, 0, 140, 0, 114};
 uint8_t g_counter_bola_in;
 uint8_t g_counter_bola_out;
 uint8_t status_bola;
 float g_ball_on_frame_x;
 float g_ball_on_frame_y;
-_Float32x g_ball_on_frame_theta;
+float g_ball_on_frame_theta;
 
 //---Obstacle vars
 //================
 vector<vector<Point>> obs_contours;
 vector<Vec4i> obs_hierarchy;
 
-unsigned short int obs_buffer[50], limit_buffer[50];
-unsigned short int obs[50], limit[50];
+unsigned short int obs_buffer[60], limit_buffer[60];
+unsigned short int obs[60], limit[60];
 
 uint16_t largest_threshold_size_obs;
 
 //---Container
 //============
 Mat display_obs = Mat::zeros(Size(g_res_x, g_res_y), CV_8UC3);
+Mat display_field = Mat::zeros(Size(g_res_x, g_res_y), CV_8UC3);
 
 //============================================================
 
 void CllbkSubFrameBgr(const sensor_msgs::ImageConstPtr &msg);
 void CllbkSubFrameYuv(const sensor_msgs::ImageConstPtr &msg);
 void CllbkTim50Hz(const ros::TimerEvent &event);
+float pixel_to_cm(float _pixel);
 
 RNG rng(12345);
+
+//---Regression
+//=============
+vector<double> regresi;
+
+//---Odom
+//=======
+_Float32 g_odom_x;
+_Float32 g_odom_y;
+_Float32 g_odom_theta;
 
 int main(int argc, char **argv)
 {
@@ -145,15 +151,35 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     inRange(frame_yuv, lower_field, upper_field, frame_yuv_field);
 
+    erode(frame_yuv_field, frame_yuv_field, getStructuringElement(MORPH_ELLIPSE, Size(4, 4)));
+
+    Mat field_gray;
+
+    raw_field_threshold = frame_yuv_field.clone();
+
+    mutex_frame_gray.lock();
+    cvtColor(frame_bgr, field_gray, COLOR_BGR2GRAY);
+    mutex_frame_gray.unlock();
+
+    //---Ignore the center of the cam
+    //---We don't want the robot detect it as an obstacle
+    //===================================================
+    circle(field_gray, Point(g_center_cam_x, g_center_cam_y), 70, Scalar(0), -1);
+    circle(field_gray, Point(g_center_cam_x, g_center_cam_y), 333, Scalar(0), 70);
+    circle(display_field, Point(g_center_cam_x, g_center_cam_y), 70, Scalar(0, 0, 255), -1);
+
+    bitwise_and(frame_yuv_field, field_gray, field_gray);
+    adaptiveThreshold(field_gray, field_gray, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 99, 0);
+    bitwise_or(field_gray, raw_field_threshold, raw_field_threshold);
+
     //---Ignore the center of Cam
     //===========================
-    //make a filled circle
+    // make a filled circle
 
     // circle(frame_yuv_field, Point(g_center_cam_x, g_center_cam_y), 100, Scalar(255, 0, 0), -1);
     // rectangle(frame_yuv_field, Point(g_center_cam_x - 10, g_center_cam_y - 10), Point(g_center_cam_x + 10, g_center_cam_y + 10), Scalar(0, 0, 0), -1);
 
     // imshow("Field Threshold", frame_yuv_field);
-
 
     //==================
     //---Ball Threshold
@@ -178,29 +204,36 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
      * Using not to get it's inverse
      * Using and
      * */
-    bitwise_or(frame_yuv_field, frame_yuv_ball, frame_yuv_obs);
+    // bitwise_or(frame_yuv_field, frame_yuv_ball, frame_yuv_obs);
+    bitwise_or(raw_field_threshold, frame_yuv_ball, frame_yuv_obs);
 
     bitwise_not(frame_yuv_obs, frame_yuv_obs);
 
+    // imshow("2", frame_yuv_obs);
+
     // bitwise_and(frame_yuv_obs, frame_yuv_field, frame_yuv_obs);
-
-    //---Ignore the center
-    //====================
-    circle(frame_yuv_obs, Point(g_center_cam_x, g_center_cam_y), 60, Scalar(0, 0, 0), -1);
-
-    erode(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
-
-    dilate(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
-    imshow("Field Threshold", frame_yuv_obs);
 
     mutex_field_raw_threshold.unlock();
     mutex_field_final_threshold.unlock();
     mutex_ball_threshold.unlock();
+    // imshow("1", frame_yuv_obs);
+
+    //---Ignore the center
+    //====================
+    circle(frame_yuv_obs, Point(g_center_cam_x, g_center_cam_y), 70, Scalar(0, 0, 0), -1);
+
+    erode(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
+
+    dilate(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
+    // imshow("Obs Threshold", frame_yuv_obs);
+    // imshow("Frame field", raw_field_threshold);
 
     raw_frame_yuv_obs = frame_yuv_obs.clone();
+    
 
     mutex_frame_bgr.lock();
     cvtColor(frame_yuv, frame_bgr, CV_YUV2BGR);
+    display_obs = frame_bgr.clone();
     mutex_frame_bgr.unlock();
     frame_yuv_obs = Scalar(0);
 
@@ -210,6 +243,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     findContours(frame_yuv_ball, ball_contours, ball_hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
     findContours(raw_frame_yuv_obs, obs_contours, obs_hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
 
+    //=======================================
     //---Get the biggest contour area for obs
     //=======================================
     for (unsigned int i = 0; i < obs_contours.size(); i++)
@@ -218,7 +252,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         {
             largest_threshold_size_obs = contourArea(obs_contours[i]);
             drawContours(frame_yuv_obs, obs_contours, i, Scalar(255), -1);
-            drawContours(frame_bgr, obs_contours, i, Scalar(0, 255, 255), 1);
+            drawContours(display_obs, obs_contours, i, Scalar(0, 255, 255), 1);
         }
     }
 
@@ -237,31 +271,53 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
                pixel_x < g_res_x &&
                pixel_y < g_res_y)
         {
+            obs_buffer[angles] = pixel_to_cm(pixel);
             // draw small circle every iterations
             circle(frame_yuv, Point(pixel_x, pixel_y), 1, Scalar(0, 255, 0), 1);
-            printf("pixel_x: %d, pixel_y: %d || pixel : %d || angles : %d\n", pixel_x, pixel_y, pixel, angles);
+            // printf("pixel_x: %d, pixel_y: %d || pixel : %d || angles : %d\n", pixel_x, pixel_y, pixel, angles);
             // obs_buffer[i] = pixel_to_cm(pixel);
-            if (frame_yuv_obs.at<unsigned char>(Point(pixel_x, pixel_y)) == 255 && pixel_x > g_center_cam_x + 50 && pixel_x < g_center_cam_x - 50 && pixel_y > g_center_cam_y + 50 && pixel_y < g_center_cam_y - 50)
+            // printf("%d\n", frame_yuv_obs.at<unsigned char>(Point(pixel_x, pixel_y)));
+            // imshow("obs", frame_yuv_obs);
+            if (frame_yuv_obs.at<unsigned char>(Point(pixel_x, pixel_y)) == 255)
             {
-                circle(frame_yuv, Point(pixel_x, pixel_y), 2, Scalar(255, 255, 0), 1);
+                // printf("ketemu\n");
+                circle(display_obs, Point(pixel_x, pixel_y), 2, Scalar(255, 255, 0), 1);
                 break;
             }
             pixel++;
             pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6)));
             pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6)));
-            // if (angles >= 0 && angles <= 15)
-            // {
-            //     pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6))) + 50;
-            //     pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6))) - 50;
-            // }
-            // else
-            // {
-            //     pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6))) - 50;
-            //     pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6))) - 50;
-            // }
         }
         if (pixel_x < 0 || pixel_y < 0 || pixel_x >= g_res_x || pixel_y >= g_res_y)
             obs_buffer[angles] = 9999;
+
+        mutex_obs_final_threshold.lock();
+        while (pixel_x >= 0 && pixel_y >= 0 && pixel_x < g_res_x && pixel_y < g_res_y)
+        {
+            limit_buffer[angles] = pixel_to_cm(pixel);
+
+            if(frame_yuv_field.at<unsigned char>(Point(pixel_x, pixel_y)) == 0)
+                break;
+            
+            pixel++;
+            pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6)));
+            pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6)));
+        }
+        if (pixel_x < 0 || pixel_y < 0 || pixel_x >= g_res_x || pixel_y >= g_res_y)
+            limit_buffer[angles] = 9999;
+        mutex_obs_final_threshold.unlock();
+    }
+
+    for(uint8_t frame_angle = 0; frame_angle < 60; frame_angle++)
+    {
+        float field_angle = frame_angle * 6 + g_odom_theta - 90;
+        while (field_angle >= 360)
+            field_angle -= 360;
+        while (field_angle < 0)
+            field_angle += 360;
+
+        obs_buffer[(int)(field_angle/6)] = obs_buffer[frame_angle];
+        limit_buffer[(int)(field_angle/6)] = limit_buffer[frame_angle];
     }
 
     //====================================================================================
@@ -346,18 +402,30 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     //---Vertical Line
     //================
-    line(frame_bgr, Point(g_center_cam_x, 0), Point(g_center_cam_x, g_center_cam_y - 50), Scalar(0, 255, 0));
-    line(frame_bgr, Point(g_center_cam_x, g_center_cam_y + 50), Point(g_center_cam_x, g_res_y), Scalar(0, 255, 0));
+    // line(frame_bgr, Point(g_center_cam_x, 0), Point(g_center_cam_x, g_center_cam_y - 50), Scalar(0, 255, 0));
+    // line(frame_bgr, Point(g_center_cam_x, g_center_cam_y + 50), Point(g_center_cam_x, g_res_y), Scalar(0, 255, 0));
 
     //---Horizontal Line
     //==================
-    line(frame_bgr, Point(0, g_center_cam_y), Point(g_center_cam_x - 50, g_center_cam_y), Scalar(0, 255, 0));
-    line(frame_bgr, Point(g_center_cam_x + 50, g_center_cam_y), Point(g_res_x, g_center_cam_y), Scalar(0, 255, 0));
+    line(frame_bgr, Point(0, g_center_cam_y), Point(g_center_cam_x, g_center_cam_y), Scalar(0, 255, 0));
+    line(frame_bgr, Point(g_center_cam_x , g_center_cam_y), Point(g_res_x, g_center_cam_y), Scalar(0, 255, 0));
 
     //---Circle
     //=========
-    circle(frame_bgr, Point(g_center_cam_x, g_center_cam_y), 50, Scalar(0, 255, 0));
-    // imshow("frame bgr", frame_bgr);
+    circle(frame_bgr, Point(g_center_cam_x, g_center_cam_y), 70, Scalar(0, 255, 0));
+    imshow("frame bgr", frame_bgr);
     // imshow("view yuv", frame_yuv);
+    // imshow("frame yuv obs", frame_yuv_obs);
+    // imshow("raw_frame_yuv_obs", raw_frame_yuv_obs);
     waitKey(30);
+}
+
+float pixel_to_cm(float _pixel)
+{
+    // Nilai regresi diambil dari config/vision.yaml
+    double result = 0;
+    for (int i = 0; i < regresi.size(); i++)
+        result += (regresi[i] * pow(_pixel, (double)i));
+
+    return result;
 }

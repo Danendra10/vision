@@ -1,8 +1,17 @@
-#include <ros/ros.h>
 #include <cv_bridge/cv_bridge.h>
+#include <image_transport/image_transport.h>
+// #include <opencv2/opencv.hpp>
+// #include <opencv2/highgui.hpp>
+#include <opencv4/opencv2/highgui.hpp>
 #include <opencv4/opencv2/opencv.hpp>
-#include <dynamic_reconfigure/server.h>
+#include <ros/ros.h>
 #include <ros/package.h>
+#include <dynamic_reconfigure/server.h>
+#include <std_msgs/UInt16MultiArray.h>
+#include <angles/angles.h>
+#include <boost/thread/mutex.hpp>
+#include <geometry_msgs/Pose2D.h>
+#include <vector>
 
 #include "vision/config.h"
 

@@ -1,12 +1,3 @@
-#include <cv_bridge/cv_bridge.h>
-#include <image_transport/image_transport.h>
-#include <opencv2/opencv.hpp>
-#include <opencv4/opencv2/opencv.hpp>
-#include <ros/ros.h>
-#include <ros/package.h>
-#include <dynamic_reconfigure/server.h>
-#include <std_msgs/UInt16MultiArray.h>
-
 #include "vision/vision_main.h"
 
 using namespace cv;
@@ -39,8 +30,9 @@ image_transport::Publisher pub_frame_field_yuv;
 
 //---Vid Capture
 //==============
-VideoCapture cap("/home/danendra/Iris/jiancuk_raceto/src/vision/vid/percobaan.mkv");
+// VideoCapture cap("/home/danendra/Iris/jiancuk_raceto/src/vision/vid/percobaan.mkv");
 // VideoCapture cap("/dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_7C21B0EF-video-index0");
+VideoCapture cap("/dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_B086D5DF-video-index0");
 
 //---Thresh
 //=========
@@ -58,10 +50,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
     ros::MultiThreadedSpinner MTS;
     image_transport::ImageTransport IT(nh);
-    // Todo:
-    // 1. Apa yang akan terjadi jika hanya ada yuv yang di pub
-    pub_frame_bgr = IT.advertise("/vision_frame_bgr", 32);
-    pub_frame_yuv = IT.advertise("/vision_frame_yuv", 32);
+
     pub_frame_field_yuv = IT.advertise("/vision_yuv", 32);
 
     tim_50_hz = nh.createTimer(ros::Duration(0.02), CllbkTim50Hz);
@@ -108,10 +97,10 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 {
     //--Store the captured to matrix
     //==============================
-    cap >> vision_capture_rgb;    
+    cap >> vision_capture_rgb;
 
     // vision_capture_raw = vision_capture_rgb.clone();
-    
+
     // vision_capture_raw = vision_capture_rgb.clone();
 
     // flip(vision_capture_raw, vision_capture_raw, 1);
@@ -127,7 +116,6 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     resize(vision_capture_rgb, vision_capture_rgb, Size(g_res_y, g_res_x));
     rotate(vision_capture_rgb, vision_capture_rgb, ROTATE_90_CLOCKWISE);
 
-
     cvtColor(vision_capture_rgb, vision_capture_yuv, CV_BGR2YUV);
 
     // namedWindow("view", WINDOW_AUTOSIZE);
@@ -138,11 +126,16 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     // createTrackbar("vMin", "view", &vMin, 255);
     // createTrackbar("vMax", "view", &vMax, 255);
 
-    // imshow("view", vision_capture_yuv);
+    // Scalar lower(yMin, uMin, vMin);
+    // Scalar upper(yMax, uMax, vMax);
+
+    // inRange(vision_capture_yuv, lower, upper, field_raw_threshold);
+
     // imshow("view2", field_raw_threshold);
-    
-    // imshow("RGB", vision_capture_yuv);
-    waitKey(1);
+
+    // imshow("YUV", vision_capture_yuv);
+    // imshow("RGB", vision_capture_rgb);
+    // waitKey(1);
 
     //---Publish Field Only
     //=====================
