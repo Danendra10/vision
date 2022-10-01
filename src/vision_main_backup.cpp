@@ -19,12 +19,17 @@ image_transport::Subscriber sub_field_final_threshold;
 image_transport::Subscriber sub_ball_threshold;
 
 //-----Publisher
-image_transport::Publisher pub_raw_threshold;
-image_transport::Publisher pub_final_threshold;
-image_transport::Publisher pub_display_out;
+image_transport::Publisher pub_raw_frame;
+
+image_transport::Publisher pub_ball_final_threshold_;
+image_transport::Publisher pub_ball_display_out_;
+
+image_transport::Publisher pub_field_final_threshold_;
+image_transport::Publisher pub_field_display_out_;
 
 ros::Publisher pub_obs;
 
+//---Mutex
 boost::mutex mutex_frame_bgr;
 boost::mutex mutex_frame_gray;
 boost::mutex mutex_frame_yuv;

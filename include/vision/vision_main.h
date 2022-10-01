@@ -12,6 +12,9 @@
 #include <boost/thread/mutex.hpp>
 #include <geometry_msgs/Pose2D.h>
 #include <vector>
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
 
 #include "vision/config.h"
 
@@ -33,6 +36,15 @@ void LoadCameraConfig(std::string camera_name, std::string _param, short int _va
     char _param_char[_param.length() + 1];
     system(_param_char);
 }
+
+typedef struct{
+    int y_min;
+    int y_max;
+    int u_min;
+    int u_max;
+    int v_min;
+    int v_max;
+} d_yuv_th;
 
 // float pixel_to_cm(float _pixel)
 // {
@@ -68,8 +80,8 @@ void LoadCameraConfig(std::string camera_name, std::string _param, short int _va
 //     }
 // }
 
-void LoadConfig()
-{
+// void LoadConfig()
+// {
     // Config cfg;
     // field
     // cfg.load("/home/danendra/Iris/jiancuk_raceto/cfg/IRIS1.yaml");
@@ -90,4 +102,4 @@ void LoadConfig()
         // // cfg.parseKeyValue("v_max", &yuv_thresh[5]);
         // cfg.parseMapEnd();
     // }
-}
+// }/

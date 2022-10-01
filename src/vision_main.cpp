@@ -19,9 +19,13 @@ image_transport::Subscriber sub_field_final_threshold;
 image_transport::Subscriber sub_ball_threshold;
 
 //-----Publisher
-image_transport::Publisher pub_raw_threshold;
-image_transport::Publisher pub_final_threshold;
-image_transport::Publisher pub_display_out;
+image_transport::Publisher pub_raw_frame;
+
+image_transport::Publisher pub_ball_final_threshold_;
+image_transport::Publisher pub_ball_display_out_;
+
+image_transport::Publisher pub_field_final_threshold_;
+image_transport::Publisher pub_field_display_out_;
 
 ros::Publisher pub_obs;
 
@@ -138,6 +142,13 @@ int main(int argc, char **argv)
     //---Subscriber
     //======================
     sub_frame_field_yuv = IT.subscribe("/vision_yuv", 32, CllbkSubFrameYuv);
+
+    //---Publisher
+    //============
+    pub_raw_frame = IT.advertise("/vision_raw", 32);
+
+    pub_field_final_threshold_ = IT.advertise("/vision_field_final_threshold", 32);
+    pub_ball_final_threshold_ = IT.advertise("/vision_ball_final_threshold", 32);
 
     MTS.spin();
 }
@@ -403,12 +414,20 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     //---Circle
     //=========
     circle(frame_bgr, Point(g_center_cam_x, g_center_cam_y), 70, Scalar(0, 255, 0));
-    imshow("frame bgr", frame_bgr);
-    imshow("display obs", display_obs);
-    // imshow("view yuv", frame_yuv);
-    // imshow("frame yuv obs", frame_yuv_obs);
-    // imshow("raw_frame_yuv_obs", raw_frame_yuv_obs);
-    waitKey(30);
+
+    //---Publishers
+    //=============
+    sensor_msgs::ImagePtr msg_raw_frame = cv_bridge::CvImage
+        (std_msgs::Header(), "bgr8", frame_bgr).toImageMsg();
+    pub_raw_frame.publish(msg_raw_frame);
+
+    sensor_msgs::ImagePtr msg_yuv_field = cv_bridge::CvImage
+        (std_msgs::Header(), "mono8", frame_yuv_field).toImageMsg();
+    pub_field_final_threshold_.publish(msg_yuv_field);
+
+    sensor_msgs::ImagePtr msg_yuv_ball = cv_bridge::CvImage
+        (std_msgs::Header(), "mono8", frame_yuv_ball).toImageMsg();
+    pub_ball_final_threshold_.publish(msg_yuv_ball);
 }
 
 float pixel_to_cm(float _pixel)
