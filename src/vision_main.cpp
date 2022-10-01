@@ -2,11 +2,12 @@
  * TODO:
  *  - get ball [v]
  *  - get field [v]
- *  - get obs []
+ *  - get obs [v]
  * obs masi bermasalah
+ * 
  * */
 #include "vision/vision_main.h"
-
+#include "master/Vision.h"
 //---Timer
 //======================
 ros::Timer timer_50hz;
@@ -27,6 +28,7 @@ image_transport::Publisher pub_ball_display_out_;
 image_transport::Publisher pub_field_final_threshold_;
 image_transport::Publisher pub_field_display_out_;
 
+ros::Publisher pub_ball;
 ros::Publisher pub_obs;
 
 boost::mutex mutex_frame_bgr;
@@ -57,6 +59,7 @@ uint16_t largest_contours_index = 0;
 //============
 int8_t g_cam_offset_x = -10;
 int8_t g_cam_offset_y = -20;
+
 float g_center_cam_x = g_res_x * 0.5 + g_cam_offset_x;
 float g_center_cam_y = g_res_y * 0.5 + g_cam_offset_y;
 
@@ -70,16 +73,32 @@ float g_center_cam_y = g_res_y * 0.5 + g_cam_offset_y;
  * */
 vector<vector<Point>> ball_contours;
 vector<Vec4i> ball_hierarchy;
+
 uint16_t g_center_ball_x;
 uint16_t g_center_ball_y;
+
 uint8_t yuv_ball_thresh[6] = {0, 255, 0, 255, 159, 255};
 uint8_t yuv_field_thresh[6] = {81, 255, 0, 140, 0, 114};
 uint8_t g_counter_bola_in;
 uint8_t g_counter_bola_out;
 uint8_t status_bola;
-float g_ball_on_frame_x;
-float g_ball_on_frame_y;
-float g_ball_on_frame_theta;
+
+/**
+ * @brief index 0 - 3 is x, y, theta, and dist, 
+ * */
+// float g_ball_on_frame[4];
+// float g_ball_on_field[4];
+
+float g_ball_x_on_frame;
+float g_ball_y_on_frame;
+float g_ball_theta_on_frame;
+float g_ball_dist_on_frame;
+
+float g_ball_dist_on_field;
+float g_ball_theta_on_field;
+float g_ball_x_on_field;
+float g_ball_y_on_field;
+
 
 //---Obstacle vars
 //================
@@ -125,9 +144,9 @@ vector<double> regresi = {
 
 //---Odom
 //=======
-_Float32 g_odom_x;
-_Float32 g_odom_y;
-_Float32 g_odom_theta;
+_Float32 g_odom_x = 450;
+_Float32 g_odom_y = 600;
+_Float32 g_odom_theta = 180;
 
 int main(int argc, char **argv)
 {
@@ -149,6 +168,9 @@ int main(int argc, char **argv)
 
     pub_field_final_threshold_ = IT.advertise("/vision_field_final_threshold", 32);
     pub_ball_final_threshold_ = IT.advertise("/vision_ball_final_threshold", 32);
+
+    pub_ball = nh.advertise<master::Vision>("/vision_ball", 16);
+    pub_obs = nh.advertise<master::Vision>("/vision_obs", 16);
 
     MTS.spin();
 }
@@ -209,24 +231,18 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     //=====================
     //---Obstacle Threshold
     //=====================
-
-    mutex_field_raw_threshold.lock();
-    mutex_field_final_threshold.lock();
-    mutex_ball_threshold.lock();
-
     /**
      * Combine the field and ball together
      * Using or because we want to get the obstacle even if there is no ball
      * Using not to get it's inverse
      * */
-    // bitwise_or(frame_yuv_field, frame_yuv_ball, frame_yuv_obs);
+    mutex_field_raw_threshold.lock();
+    mutex_field_final_threshold.lock();
+    mutex_ball_threshold.lock();
+
     bitwise_or(raw_field_threshold, frame_yuv_ball, frame_yuv_obs);
 
     bitwise_not(frame_yuv_obs, frame_yuv_obs);
-
-    // imshow("2", frame_yuv_obs);
-
-    // bitwise_and(frame_yuv_obs, frame_yuv_field, frame_yuv_obs);
 
     mutex_field_raw_threshold.unlock();
     mutex_field_final_threshold.unlock();
@@ -390,9 +406,25 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
         //---Ball pos relative from mid of frame
         //======================================
-        g_ball_on_frame_x = g_center_ball_x - g_center_cam_x;
-        g_ball_on_frame_y = g_center_cam_y - g_center_ball_y;
-        g_ball_on_frame_theta = atan2(g_ball_on_frame_y, g_ball_on_frame_x);
+        g_ball_x_on_frame = g_center_ball_x - g_center_cam_x;
+        g_ball_y_on_frame = g_center_cam_y - g_center_ball_y;
+        g_ball_theta_on_frame = atan2(g_ball_y_on_frame, g_ball_x_on_frame);
+
+        g_ball_dist_on_frame = sqrt(g_ball_y_on_frame * g_ball_y_on_frame + g_ball_x_on_frame * g_ball_x_on_frame);
+        g_ball_dist_on_field = pixel_to_cm(g_ball_dist_on_frame);
+
+        g_ball_theta_on_field = g_ball_theta_on_frame + g_odom_theta - 90;
+        while (g_ball_theta_on_field < -180)
+            g_ball_theta_on_field += 360;
+        while (g_ball_theta_on_field > 180)
+            g_ball_theta_on_field -= 360;
+
+        g_ball_x_on_field = g_odom_x + g_ball_dist_on_field *
+            cos(angles::from_degrees(g_ball_theta_on_field));
+        g_ball_y_on_field = g_odom_x + g_ball_dist_on_field *
+            sin(angles::from_degrees(g_ball_theta_on_field));
+
+        printf("%f | %f | %f | %f\n", g_ball_x_on_field, g_ball_y_on_field, g_ball_theta_on_field, g_ball_theta_on_frame);
 
         //---Get Radius
         //=============
@@ -403,7 +435,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         //================
         circle(frame_bgr, mc[largest_contour_index], ball_radius, Scalar(0, 0, 255));
 
-        // printf("Ball pos: %f | %f | %f\n", g_ball_on_frame_x, g_ball_on_frame_y, g_ball_on_frame_theta);
+        // printf("Ball pos: %f | %f | %f\n", g_ball_x_on_frame, g_ball_y_on_frame, g_ball_theta_on_frame);
     }
 
     //---Draw Line
@@ -417,17 +449,21 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     //---Publishers
     //=============
-    sensor_msgs::ImagePtr msg_raw_frame = cv_bridge::CvImage
-        (std_msgs::Header(), "bgr8", frame_bgr).toImageMsg();
+    sensor_msgs::ImagePtr msg_raw_frame = cv_bridge::CvImage(std_msgs::Header(), "bgr8", frame_bgr).toImageMsg();
     pub_raw_frame.publish(msg_raw_frame);
 
-    sensor_msgs::ImagePtr msg_yuv_field = cv_bridge::CvImage
-        (std_msgs::Header(), "mono8", frame_yuv_field).toImageMsg();
+    sensor_msgs::ImagePtr msg_yuv_field = cv_bridge::CvImage(std_msgs::Header(), "mono8", frame_yuv_field).toImageMsg();
     pub_field_final_threshold_.publish(msg_yuv_field);
 
-    sensor_msgs::ImagePtr msg_yuv_ball = cv_bridge::CvImage
-        (std_msgs::Header(), "mono8", frame_yuv_ball).toImageMsg();
+    sensor_msgs::ImagePtr msg_yuv_ball = cv_bridge::CvImage(std_msgs::Header(), "mono8", frame_yuv_ball).toImageMsg();
     pub_ball_final_threshold_.publish(msg_yuv_ball);
+
+    // master::Vision msg_vision;
+    // msg_vision.
+
+    imshow("BGR", frame_bgr);
+    imshow("obs", display_obs);
+    waitKey(30);
 }
 
 float pixel_to_cm(float _pixel)
