@@ -28,8 +28,7 @@ image_transport::Publisher pub_ball_display_out_;
 image_transport::Publisher pub_field_final_threshold_;
 image_transport::Publisher pub_field_display_out_;
 
-ros::Publisher pub_ball;
-ros::Publisher pub_obs;
+ros::Publisher pub_vision;
 
 boost::mutex mutex_frame_bgr;
 boost::mutex mutex_frame_gray;
@@ -81,7 +80,7 @@ uint8_t yuv_ball_thresh[6] = {0, 255, 0, 255, 159, 255};
 uint8_t yuv_field_thresh[6] = {81, 255, 0, 140, 0, 114};
 uint8_t g_counter_bola_in;
 uint8_t g_counter_bola_out;
-uint8_t status_bola;
+uint8_t ball_status;
 
 /**
  * @brief index 0 - 3 is x, y, theta, and dist, 
@@ -169,8 +168,7 @@ int main(int argc, char **argv)
     pub_field_final_threshold_ = IT.advertise("/vision_field_final_threshold", 32);
     pub_ball_final_threshold_ = IT.advertise("/vision_ball_final_threshold", 32);
 
-    pub_ball = nh.advertise<master::Vision>("/vision_ball", 16);
-    pub_obs = nh.advertise<master::Vision>("/vision_obs", 16);
+    pub_vision = nh.advertise<master::Vision>("/vision_data", 16);
 
     MTS.spin();
 }
@@ -285,7 +283,8 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         if (contourArea(obs_contours[i]) > 1000)
         {
             drawContours(frame_yuv_obs, obs_contours, i, Scalar(255), -1);
-            drawContours(display_obs, obs_contours, i, Scalar(0, 255, 255), 1);
+            // drawContours(display_obs, obs_contours, i, Scalar(0, 255, 255), 1);
+            drawContours(frame_bgr, obs_contours, i, Scalar(0, 255, 255), 1);
         }
     }
 
@@ -307,7 +306,8 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
             obs_buffer[angles] = pixel_to_cm(pixel);
             if (frame_yuv_obs.at<unsigned char>(Point(pixel_x, pixel_y)) == 255)
             {
-                circle(display_obs, Point(pixel_x, pixel_y), 2, Scalar(255, 255, 0), 1);
+                // circle(display_obs, Point(pixel_x, pixel_y), 2, Scalar(255, 255, 0), 1);
+                circle(frame_bgr, Point(pixel_x, pixel_y), 2, Scalar(255, 255, 0), 1);
                 break;
             }
             pixel++;
@@ -379,13 +379,13 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     //---Found the ball
     //=================
     if (g_counter_bola_in > 100)
-        status_bola = 1;
+        ball_status = 1;
     else if (g_counter_bola_out > 300)
-        status_bola = 0;
+        ball_status = 0;
 
     //---Update Ball pos
     //==================
-    if (status_bola)
+    if (ball_status)
     {
         //---Get the moments
         //==================
@@ -458,11 +458,27 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     sensor_msgs::ImagePtr msg_yuv_ball = cv_bridge::CvImage(std_msgs::Header(), "mono8", frame_yuv_ball).toImageMsg();
     pub_ball_final_threshold_.publish(msg_yuv_ball);
 
-    // master::Vision msg_vision;
-    // msg_vision.
+    master::Vision msg_vision;
+    msg_vision.ball_on_frame_x = g_ball_x_on_frame;
+    msg_vision.ball_on_frame_y = g_ball_y_on_frame;
+    msg_vision.ball_on_frame_theta = g_ball_theta_on_frame;
+    msg_vision.ball_on_frame_dist = g_ball_dist_on_frame;
 
-    imshow("BGR", frame_bgr);
-    imshow("obs", display_obs);
+    msg_vision.ball_on_field_x = g_ball_x_on_field;
+    msg_vision.ball_on_field_y = g_ball_y_on_field;
+    msg_vision.ball_on_field_theta = g_ball_theta_on_field;
+    msg_vision.ball_on_field_dist = g_ball_dist_on_field;
+
+    msg_vision.ball_status = ball_status;
+
+    for(uint16_t angles = 0; angles < 360; angles += 6){
+        msg_vision.obs_on_field.push_back(obs[(int)(angles*1.667)]);
+        msg_vision.obs_limit.push_back(limit[(int)(angles*1.667)]);
+    }
+    pub_vision.publish(msg_vision);
+
+    // imshow("BGR", frame_bgr);
+    // imshow("obs", display_obs);
     waitKey(30);
 }
 
