@@ -1,0 +1,7 @@
+ball:
+  y_min: 19
+  y_max: 0
+  u_min: 151
+  u_max: 193
+  v_min: 126
+  v_max: 255

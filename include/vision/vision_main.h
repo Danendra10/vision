@@ -17,6 +17,7 @@
 #include <stdint.h>
 
 #include "vision/config.h"
+#include "master/config.h"
 
 using namespace std;
 using namespace cv;
@@ -45,61 +46,3 @@ typedef struct{
     int v_min;
     int v_max;
 } d_yuv_th;
-
-// float pixel_to_cm(float _pixel)
-// {
-//     // Nilai regresi diambil dari config/vision.yaml
-//     double result = 0;
-//     for (int i = 0; i < regresi.size(); i++)
-//         result += (regresi[i] * pow(_pixel, (double)i));
-
-//     return result;
-// }
-
-// void LoadConfig(uint8_t status, uint8_t *yuv_thresh)
-// {
-//     Config cfg;
-//     // field
-//     cfg.load("/home/danendra/Iris/jiancuk_raceto/cfg/IRIS1.yaml");
-
-//     // field
-//     // if (status == 0)
-//     // {
-//     // }
-//     // ball
-//     if (status == 1)
-//     {
-//         cfg.parseMapBegin("ball");
-//         cfg.parseKeyValue("y_min", &yuv_thresh[0]);
-//         cfg.parseKeyValue("y_max", &yuv_thresh[1]);
-//         cfg.parseKeyValue("u_min", &yuv_thresh[2]);
-//         cfg.parseKeyValue("u_max", &yuv_thresh[3]);
-//         cfg.parseKeyValue("v_min", &yuv_thresh[4]);
-//         cfg.parseKeyValue("v_max", &yuv_thresh[5]);
-//         cfg.parseMapEnd();
-//     }
-// }
-
-// void LoadConfig()
-// {
-    // Config cfg;
-    // field
-    // cfg.load("/home/danendra/Iris/jiancuk_raceto/cfg/IRIS1.yaml");
-
-    // field
-    // if (status == 0)
-    // {
-    // }
-    // ball
-    // if (status == 1)
-    // {
-        // cfg.parseMapBegin("ball");
-        // cfg.parseKeyValue("y_min", &yuv_thresh[0]);
-        // // cfg.parseKeyValue("y_max", &yuv_thresh[1]);
-        // // cfg.parseKeyValue("u_min", &yuv_thresh[2]);
-        // // cfg.parseKeyValue("u_max", &yuv_thresh[3]);
-        // // cfg.parseKeyValue("v_min", &yuv_thresh[4]);
-        // // cfg.parseKeyValue("v_max", &yuv_thresh[5]);
-        // cfg.parseMapEnd();
-    // }
-// }/

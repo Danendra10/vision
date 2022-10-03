@@ -4,7 +4,7 @@
  *  - get field [v]
  *  - get obs [v]
  * obs masi bermasalah
- * 
+ *
  * */
 #include "vision/vision_main.h"
 #include "master/Vision.h"
@@ -56,8 +56,8 @@ uint16_t largest_contours_index = 0;
 
 //---Cam Vars
 //============
-int8_t g_cam_offset_x = -10;
-int8_t g_cam_offset_y = -20;
+int8_t g_cam_offset_x = 10;
+int8_t g_cam_offset_y = 20;
 
 float g_center_cam_x = g_res_x * 0.5 + g_cam_offset_x;
 float g_center_cam_y = g_res_y * 0.5 + g_cam_offset_y;
@@ -83,7 +83,7 @@ uint8_t g_counter_bola_out;
 uint8_t ball_status;
 
 /**
- * @brief index 0 - 3 is x, y, theta, and dist, 
+ * @brief index 0 - 3 is x, y, theta, and dist,
  * */
 // float g_ball_on_frame[4];
 // float g_ball_on_field[4];
@@ -97,7 +97,6 @@ float g_ball_dist_on_field;
 float g_ball_theta_on_field;
 float g_ball_x_on_field;
 float g_ball_y_on_field;
-
 
 //---Obstacle vars
 //================
@@ -121,7 +120,7 @@ Mat display_field = Mat::zeros(Size(g_res_x, g_res_y), CV_8UC3);
 void CllbkSubFrameBgr(const sensor_msgs::ImageConstPtr &msg);
 void CllbkSubFrameYuv(const sensor_msgs::ImageConstPtr &msg);
 void CllbkTim50Hz(const ros::TimerEvent &event);
-float pixel_to_cm(float _pixel);
+float PixelToCm(float _pixel);
 
 //---Iterator
 //===========
@@ -139,13 +138,14 @@ vector<double> regresi = {
     -3.8247974657217687e-002,
     2.6590340135171527e-004,
     -9.7049198872430191e-007,
-    1.4626257536892665e-009};
+    1.4626257536892665e-009,
+};
 
 //---Odom
 //=======
-_Float32 g_odom_x = 450;
-_Float32 g_odom_y = 600;
-_Float32 g_odom_theta = 180;
+_Float32 g_odom_x = 0;
+_Float32 g_odom_y = 0;
+_Float32 g_odom_theta = 90;
 
 int main(int argc, char **argv)
 {
@@ -170,6 +170,8 @@ int main(int argc, char **argv)
 
     pub_vision = nh.advertise<master::Vision>("/vision_data", 16);
 
+    // LoadConfig();
+
     MTS.spin();
 }
 
@@ -189,6 +191,7 @@ void CllbkSubFrameYuv(const sensor_msgs::ImageConstPtr &msg)
 
 void CllbkTim50Hz(const ros::TimerEvent &event)
 {
+    // LoadConfig();
     //==================
     //---Field Threshold
     //==================
@@ -209,9 +212,9 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     //---Ignore the center of the cam
     //---We don't want the robot detect it as an obstacle
     //===================================================
-    circle(field_gray, Point(g_center_cam_x, g_center_cam_y), 70, Scalar(0), -1);
-    circle(field_gray, Point(g_center_cam_x, g_center_cam_y), 333, Scalar(0), 70);
-    circle(display_field, Point(g_center_cam_x, g_center_cam_y), 70, Scalar(0, 0, 255), -1);
+    circle(field_gray, Point(g_center_cam_x, g_center_cam_y), 65, Scalar(0), -1);
+    circle(field_gray, Point(g_center_cam_x, g_center_cam_y), 333, Scalar(0), 65);
+    circle(display_field, Point(g_center_cam_x, g_center_cam_y), 65, Scalar(0, 0, 255), -1);
 
     bitwise_and(frame_yuv_field, field_gray, field_gray);
     adaptiveThreshold(field_gray, field_gray, 255, CV_ADAPTIVE_THRESH_MEAN_C, CV_THRESH_BINARY, 99, 0);
@@ -248,7 +251,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     //---Ignore the center
     //====================
-    circle(frame_yuv_obs, Point(g_center_cam_x, g_center_cam_y), 70, Scalar(0, 0, 0), -1);
+    circle(frame_yuv_obs, Point(g_center_cam_x, g_center_cam_y), 65, Scalar(0, 0, 0), -1);
 
     erode(frame_yuv_obs, frame_yuv_obs, getStructuringElement(MORPH_ELLIPSE, Size(11, 11)));
 
@@ -303,7 +306,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
                pixel_x < g_res_x &&
                pixel_y < g_res_y)
         {
-            obs_buffer[angles] = pixel_to_cm(pixel);
+            obs_buffer[angles] = PixelToCm(pixel);
             if (frame_yuv_obs.at<unsigned char>(Point(pixel_x, pixel_y)) == 255)
             {
                 // circle(display_obs, Point(pixel_x, pixel_y), 2, Scalar(255, 255, 0), 1);
@@ -320,7 +323,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         mutex_obs_final_threshold.lock();
         while (pixel_x >= 0 && pixel_y >= 0 && pixel_x < g_res_x && pixel_y < g_res_y)
         {
-            limit_buffer[angles] = pixel_to_cm(pixel);
+            limit_buffer[angles] = PixelToCm(pixel);
 
             if (frame_yuv_field.at<unsigned char>(Point(pixel_x, pixel_y)) == 0)
                 break;
@@ -408,10 +411,10 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         //======================================
         g_ball_x_on_frame = g_center_ball_x - g_center_cam_x;
         g_ball_y_on_frame = g_center_cam_y - g_center_ball_y;
-        g_ball_theta_on_frame = atan2(g_ball_y_on_frame, g_ball_x_on_frame);
+        g_ball_theta_on_frame = angles::to_degrees(atan2(g_ball_y_on_frame, g_ball_x_on_frame));
 
         g_ball_dist_on_frame = sqrt(g_ball_y_on_frame * g_ball_y_on_frame + g_ball_x_on_frame * g_ball_x_on_frame);
-        g_ball_dist_on_field = pixel_to_cm(g_ball_dist_on_frame);
+        g_ball_dist_on_field = PixelToCm(g_ball_dist_on_frame);
 
         g_ball_theta_on_field = g_ball_theta_on_frame + g_odom_theta - 90;
         while (g_ball_theta_on_field < -180)
@@ -420,9 +423,9 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
             g_ball_theta_on_field -= 360;
 
         g_ball_x_on_field = g_odom_x + g_ball_dist_on_field *
-            cos(angles::from_degrees(g_ball_theta_on_field));
+                                           cos(angles::from_degrees(g_ball_theta_on_field));
         g_ball_y_on_field = g_odom_x + g_ball_dist_on_field *
-            sin(angles::from_degrees(g_ball_theta_on_field));
+                                           sin(angles::from_degrees(g_ball_theta_on_field));
 
         printf("%f | %f | %f | %f\n", g_ball_x_on_field, g_ball_y_on_field, g_ball_theta_on_field, g_ball_theta_on_frame);
 
@@ -436,6 +439,8 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         circle(frame_bgr, mc[largest_contour_index], ball_radius, Scalar(0, 0, 255));
 
         // printf("Ball pos: %f | %f | %f\n", g_ball_x_on_frame, g_ball_y_on_frame, g_ball_theta_on_frame);
+        printf("Ball pos: %f | %f | %f\n", g_ball_x_on_field, g_ball_y_on_field, g_ball_theta_on_field);
+        printf("Ball on frame pos: %f | %f | %f\n", g_ball_x_on_frame, g_ball_y_on_frame, g_ball_theta_on_frame);
     }
 
     //---Draw Line
@@ -445,7 +450,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     //---Circle
     //=========
-    circle(frame_bgr, Point(g_center_cam_x, g_center_cam_y), 70, Scalar(0, 255, 0));
+    circle(frame_bgr, Point(g_center_cam_x, g_center_cam_y), 65, Scalar(0, 255, 0));
 
     //---Publishers
     //=============
@@ -471,18 +476,19 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     msg_vision.ball_status = ball_status;
 
-    for(uint16_t angles = 0; angles < 360; angles += 6){
-        msg_vision.obs_on_field.push_back(obs[(int)(angles*1.667)]);
-        msg_vision.obs_limit.push_back(limit[(int)(angles*1.667)]);
+    for (uint16_t angles = 0; angles < 360; angles += 6)
+    {
+        msg_vision.obs_on_field.push_back(obs[(int)(angles * 1.667)]);
+        msg_vision.obs_limit.push_back(limit[(int)(angles * 1.667)]);
     }
     pub_vision.publish(msg_vision);
 
-    // imshow("BGR", frame_bgr);
-    // imshow("obs", display_obs);
+    imshow("BGR", frame_bgr);
+    imshow("obs", display_obs);
     waitKey(30);
 }
 
-float pixel_to_cm(float _pixel)
+float PixelToCm(float _pixel)
 {
     // Nilai regresi diambil dari config/vision.yaml
     double result = 0;
@@ -490,4 +496,19 @@ float pixel_to_cm(float _pixel)
         result += (regresi[i] * pow(_pixel, (double)i));
 
     return result;
+}
+
+void LoadConfig()
+{
+    Config cfg;
+    cfg.load("IRIS1.yaml");
+
+    cfg.parseMapBegin("ball");
+    cfg.parseKeyValue("y_min", &yuv_ball_thresh[0]);
+    cfg.parseKeyValue("y_max", &yuv_ball_thresh[1]);
+    cfg.parseKeyValue("u_min", &yuv_ball_thresh[2]);
+    cfg.parseKeyValue("u_max", &yuv_ball_thresh[3]);
+    cfg.parseKeyValue("v_min", &yuv_ball_thresh[4]);
+    cfg.parseKeyValue("v_max", &yuv_ball_thresh[5]);
+    cfg.parseMapEnd();
 }

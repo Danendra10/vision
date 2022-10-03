@@ -30,9 +30,9 @@ image_transport::Publisher pub_frame_field_yuv;
 
 //---Vid Capture
 //==============
-VideoCapture cap("/home/danendra/Iris/jiancuk_raceto/src/vision/vid/percobaan.mkv");
+// VideoCapture cap("/home/danendra/Iris/jiancuk_raceto/src/vision/vid/percobaan.mkv");
 // VideoCapture cap("/dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_7C21B0EF-video-index0");
-// VideoCapture cap("/dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_B086D5DF-video-index0");
+VideoCapture cap("/dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_B086D5DF-video-index0");
 
 //---Thresh
 //=========
@@ -68,7 +68,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     flip(vision_capture_rgb, vision_capture_rgb, 1);
     // vision_capture_rgb = vision_capture_rgb(Rect(0, 100, g_res_x, g_res_y * 0.65));
     resize(vision_capture_rgb, vision_capture_rgb, Size(g_res_y, g_res_x));
-    rotate(vision_capture_rgb, vision_capture_rgb, ROTATE_90_CLOCKWISE);
+    rotate(vision_capture_rgb, vision_capture_rgb, ROTATE_90_COUNTERCLOCKWISE);
 
     cvtColor(vision_capture_rgb, vision_capture_yuv, CV_BGR2YUV);
 
