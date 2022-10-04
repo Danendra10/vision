@@ -76,7 +76,8 @@ vector<Vec4i> ball_hierarchy;
 uint16_t g_center_ball_x;
 uint16_t g_center_ball_y;
 
-uint8_t yuv_ball_thresh[6] = {0, 255, 0, 255, 159, 255};
+unsigned short int yuv_ball_thresh[6];
+// uint8_t yuv_ball_thresh[6] = {0, 255, 0, 255, 159, 255};
 uint8_t yuv_field_thresh[6] = {81, 255, 0, 140, 0, 114};
 uint8_t g_counter_bola_in;
 uint8_t g_counter_bola_out;
@@ -127,8 +128,6 @@ float PixelToCm(float _pixel);
 uint16_t i;
 uint8_t frame_angle;
 
-RNG rng(12345);
-
 //---Regression
 //=============
 vector<double> regresi = {
@@ -157,6 +156,7 @@ int main(int argc, char **argv)
 
     timer_50hz = nh.createTimer(ros::Duration(0.02), CllbkTim50Hz);
 
+    LoadConfig();
     //---Subscriber
     //======================
     sub_frame_field_yuv = IT.subscribe("/vision_yuv", 32, CllbkSubFrameYuv);
@@ -427,7 +427,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         g_ball_y_on_field = g_odom_x + g_ball_dist_on_field *
                                            sin(angles::from_degrees(g_ball_theta_on_field));
 
-        printf("%f | %f | %f | %f\n", g_ball_x_on_field, g_ball_y_on_field, g_ball_theta_on_field, g_ball_theta_on_frame);
+        // printf("%f | %f | %f | %f\n", g_ball_x_on_field, g_ball_y_on_field, g_ball_theta_on_field, g_ball_theta_on_frame);
 
         //---Get Radius
         //=============
@@ -439,8 +439,8 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         circle(frame_bgr, mc[largest_contour_index], ball_radius, Scalar(0, 0, 255));
 
         // printf("Ball pos: %f | %f | %f\n", g_ball_x_on_frame, g_ball_y_on_frame, g_ball_theta_on_frame);
-        printf("Ball pos: %f | %f | %f\n", g_ball_x_on_field, g_ball_y_on_field, g_ball_theta_on_field);
-        printf("Ball on frame pos: %f | %f | %f\n", g_ball_x_on_frame, g_ball_y_on_frame, g_ball_theta_on_frame);
+        // printf("Ball pos: %f | %f | %f\n", g_ball_x_on_field, g_ball_y_on_field, g_ball_theta_on_field);
+        // printf("Ball on frame pos: %f | %f | %f\n", g_ball_x_on_frame, g_ball_y_on_frame, g_ball_theta_on_frame);
     }
 
     //---Draw Line
@@ -501,7 +501,8 @@ float PixelToCm(float _pixel)
 void LoadConfig()
 {
     Config cfg;
-    cfg.load("IRIS1.yaml");
+
+    cfg.load("cfg.yaml");
 
     cfg.parseMapBegin("ball");
     cfg.parseKeyValue("y_min", &yuv_ball_thresh[0]);

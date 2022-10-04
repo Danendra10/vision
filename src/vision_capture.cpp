@@ -30,9 +30,9 @@ image_transport::Publisher pub_frame_field_yuv;
 
 //---Vid Capture
 //==============
-// VideoCapture cap("/home/danendra/Iris/jiancuk_raceto/src/vision/vid/percobaan.mkv");
+VideoCapture cap("/home/danendra/Iris/jiancuk_raceto/src/vision/vid/percobaan.mkv");
 // VideoCapture cap("/dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_7C21B0EF-video-index0");
-VideoCapture cap("/dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_B086D5DF-video-index0");
+// VideoCapture cap("/dev/v4l/by-id/usb-046d_C922_Pro_Stream_Webcam_B086D5DF-video-index0");
 
 //---Thresh
 //=========
@@ -72,19 +72,6 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     cvtColor(vision_capture_rgb, vision_capture_yuv, CV_BGR2YUV);
 
-    // namedWindow("view", WINDOW_AUTOSIZE);
-    // createTrackbar("yMin", "view", &yMin, 255);
-    // createTrackbar("yMax", "view", &yMax, 255);
-    // createTrackbar("uMin", "view", &uMin, 255);
-    // createTrackbar("uMax", "view", &uMax, 255);
-    // createTrackbar("vMin", "view", &vMin, 255);
-    // createTrackbar("vMax", "view", &vMax, 255);
-
-    // Scalar lower(yMin, uMin, vMin);
-    // Scalar upper(yMax, uMax, vMax);
-
-    // inRange(vision_capture_yuv, lower, upper, field_raw_threshold);
-
     //---Publish Field Only
     //=====================
     sensor_msgs::ImagePtr msg_frame_field_yuv =
@@ -97,3 +84,15 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
 
     // mutex_field_raw_threshold.unlock();
 }
+    // namedWindow("view", WINDOW_AUTOSIZE);
+    // createTrackbar("yMin", "view", &yMin, 255);
+    // createTrackbar("yMax", "view", &yMax, 255);
+    // createTrackbar("uMin", "view", &uMin, 255);
+    // createTrackbar("uMax", "view", &uMax, 255);
+    // createTrackbar("vMin", "view", &vMin, 255);
+    // createTrackbar("vMax", "view", &vMax, 255);
+
+    // Scalar lower(yMin, uMin, vMin);
+    // Scalar upper(yMax, uMax, vMax);
+
+    // inRange(vision_capture_yuv, lower, upper, field_raw_threshold);
