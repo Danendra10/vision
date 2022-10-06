@@ -1,14 +1,11 @@
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
-// #include <opencv2/opencv.hpp>
-// #include <opencv2/highgui.hpp>
 #include <opencv4/opencv2/highgui.hpp>
 #include <opencv4/opencv2/opencv.hpp>
 #include <ros/ros.h>
 #include <ros/package.h>
 #include <dynamic_reconfigure/server.h>
 #include <std_msgs/UInt16MultiArray.h>
-#include <angles/angles.h>
 #include <boost/thread/mutex.hpp>
 #include <geometry_msgs/Pose2D.h>
 #include <vector>
@@ -18,6 +15,9 @@
 
 #include "vision/config.h"
 #include "master/config.h"
+
+#define DEG2RAD 0.017452925
+#define RAD2DEG 57.295780
 
 using namespace std;
 using namespace cv;
@@ -38,7 +38,8 @@ void LoadCameraConfig(std::string camera_name, std::string _param, short int _va
     system(_param_char);
 }
 
-typedef struct{
+typedef struct
+{
     int y_min;
     int y_max;
     int u_min;

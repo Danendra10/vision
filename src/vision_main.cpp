@@ -314,8 +314,8 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
                 break;
             }
             pixel++;
-            pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6)));
-            pixel_y = g_center_cam_y - (pixel * sin(angles::from_degrees((float)angles * 6)));
+            pixel_x = g_center_cam_x + (pixel * cos((float)angles * 6 * DEG2RAD));
+            pixel_y = g_center_cam_y - (pixel * sin((float)angles * 6 * DEG2RAD));
         }
         if (pixel_x < 0 || pixel_y < 0 || pixel_x >= g_res_x || pixel_y >= g_res_y)
             obs_buffer[angles] = 9999;
@@ -329,8 +329,8 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
                 break;
 
             pixel++;
-            pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6)));
-            pixel_y = g_center_cam_y - (pixel * sin(angles::from_degrees((float)angles * 6)));
+            pixel_x = g_center_cam_x + (pixel * cos((float)angles * 6 * DEG2RAD));
+            pixel_y = g_center_cam_y - (pixel * sin((float)angles * 6 * DEG2RAD));
         }
         if (pixel_x < 0 || pixel_y < 0 || pixel_x >= g_res_x || pixel_y >= g_res_y)
             limit_buffer[angles] = 9999;
@@ -411,7 +411,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         //======================================
         g_ball_x_on_frame = g_center_ball_x - g_center_cam_x;
         g_ball_y_on_frame = g_center_cam_y - g_center_ball_y;
-        g_ball_theta_on_frame = angles::to_degrees(atan2(g_ball_y_on_frame, g_ball_x_on_frame));
+        g_ball_theta_on_frame = atan2(g_ball_y_on_frame, g_ball_x_on_frame) * RAD2DEG;
 
         g_ball_dist_on_frame = sqrt(g_ball_y_on_frame * g_ball_y_on_frame + g_ball_x_on_frame * g_ball_x_on_frame);
         g_ball_dist_on_field = PixelToCm(g_ball_dist_on_frame);
@@ -423,9 +423,9 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
             g_ball_theta_on_field -= 360;
 
         g_ball_x_on_field = g_odom_x + g_ball_dist_on_field *
-                                           cos(angles::from_degrees(g_ball_theta_on_field));
+                                           cos(g_ball_theta_on_field * DEG2RAD);
         g_ball_y_on_field = g_odom_x + g_ball_dist_on_field *
-                                           sin(angles::from_degrees(g_ball_theta_on_field));
+                                           sin(g_ball_theta_on_field * DEG2RAD);
 
         // printf("%f | %f | %f | %f\n", g_ball_x_on_field, g_ball_y_on_field, g_ball_theta_on_field, g_ball_theta_on_frame);
 

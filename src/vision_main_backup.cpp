@@ -233,7 +233,6 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     // imshow("Frame field", raw_field_threshold);
 
     raw_frame_yuv_obs = frame_yuv_obs.clone();
-    
 
     mutex_frame_bgr.lock();
     cvtColor(frame_yuv, frame_bgr, CV_YUV2BGR);
@@ -289,8 +288,8 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
                 break;
             }
             pixel++;
-            pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6)));
-            pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6)));
+            pixel_x = g_center_cam_x + (pixel * cos((float)angles * 6 * DEG2RAD));
+            pixel_y = g_center_cam_y + (pixel * sin((float)angles * 6 * DEG2RAD));
         }
         if (pixel_x < 0 || pixel_y < 0 || pixel_x >= g_res_x || pixel_y >= g_res_y)
             obs_buffer[angles] = 9999;
@@ -300,19 +299,19 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         {
             limit_buffer[angles] = pixel_to_cm(pixel);
 
-            if(frame_yuv_field.at<unsigned char>(Point(pixel_x, pixel_y)) == 0)
+            if (frame_yuv_field.at<unsigned char>(Point(pixel_x, pixel_y)) == 0)
                 break;
-            
+
             pixel++;
-            pixel_x = g_center_cam_x + (pixel * cos(angles::from_degrees((float)angles * 6)));
-            pixel_y = g_center_cam_y + (pixel * sin(angles::from_degrees((float)angles * 6)));
+            pixel_x = g_center_cam_x + (pixel * cos((float)angles * 6 * DEG2RAD));
+            pixel_y = g_center_cam_y + (pixel * sin((float)angles * 6 * DEG2RAD));
         }
         if (pixel_x < 0 || pixel_y < 0 || pixel_x >= g_res_x || pixel_y >= g_res_y)
             limit_buffer[angles] = 9999;
         mutex_obs_final_threshold.unlock();
     }
 
-    for(uint8_t frame_angle = 0; frame_angle < 60; frame_angle++)
+    for (uint8_t frame_angle = 0; frame_angle < 60; frame_angle++)
     {
         float field_angle = frame_angle * 6 + g_odom_theta - 90;
         while (field_angle >= 360)
@@ -320,8 +319,8 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         while (field_angle < 0)
             field_angle += 360;
 
-        obs_buffer[(int)(field_angle/6)] = obs_buffer[frame_angle];
-        limit_buffer[(int)(field_angle/6)] = limit_buffer[frame_angle];
+        obs_buffer[(int)(field_angle / 6)] = obs_buffer[frame_angle];
+        limit_buffer[(int)(field_angle / 6)] = limit_buffer[frame_angle];
     }
 
     //====================================================================================
@@ -412,7 +411,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     //---Horizontal Line
     //==================
     line(frame_bgr, Point(0, g_center_cam_y), Point(g_center_cam_x, g_center_cam_y), Scalar(0, 255, 0));
-    line(frame_bgr, Point(g_center_cam_x , g_center_cam_y), Point(g_res_x, g_center_cam_y), Scalar(0, 255, 0));
+    line(frame_bgr, Point(g_center_cam_x, g_center_cam_y), Point(g_res_x, g_center_cam_y), Scalar(0, 255, 0));
 
     //---Circle
     //=========
