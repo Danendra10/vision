@@ -483,9 +483,9 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     }
     pub_vision.publish(msg_vision);
 
-    imshow("BGR", frame_bgr);
-    imshow("obs", display_obs);
-    waitKey(30);
+    // imshow("BGR", frame_bgr);
+    // imshow("obs", display_obs);
+    // waitKey(30);
 }
 
 float PixelToCm(float _pixel)
