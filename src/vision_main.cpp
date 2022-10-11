@@ -8,6 +8,7 @@
  * */
 #include "vision/vision_main.h"
 #include "master/Vision.h"
+#include "geometry_msgs/Pose2D.h"
 //---Timer
 //======================
 ros::Timer timer_50hz;
@@ -18,6 +19,7 @@ image_transport::Subscriber sub_frame_field_yuv;
 image_transport::Subscriber sub_field_raw_threshold;
 image_transport::Subscriber sub_field_final_threshold;
 image_transport::Subscriber sub_ball_threshold;
+ros::Subscriber sub_odom;
 
 //-----Publisher
 image_transport::Publisher pub_raw_frame;
@@ -81,7 +83,7 @@ unsigned short int yuv_ball_thresh[6];
 uint8_t yuv_field_thresh[6] = {81, 255, 0, 140, 0, 114};
 uint8_t g_counter_bola_in;
 uint8_t g_counter_bola_out;
-uint8_t ball_status;
+uint8_t status_ball;
 
 /**
  * @brief index 0 - 3 is x, y, theta, and dist,
@@ -120,6 +122,7 @@ Mat display_field = Mat::zeros(Size(g_res_x, g_res_y), CV_8UC3);
 //=============
 void CllbkSubFrameBgr(const sensor_msgs::ImageConstPtr &msg);
 void CllbkSubFrameYuv(const sensor_msgs::ImageConstPtr &msg);
+void CllbckSubOdom(const geometry_msgs::Pose2DConstPtr &msg);
 void CllbkTim50Hz(const ros::TimerEvent &event);
 float PixelToCm(float _pixel);
 
@@ -142,9 +145,9 @@ vector<double> regresi = {
 
 //---Odom
 //=======
-_Float32 g_odom_x = 0;
-_Float32 g_odom_y = 0;
-_Float32 g_odom_theta = 90;
+_Float32 g_odom_x;
+_Float32 g_odom_y;
+_Float32 g_odom_theta;
 
 int main(int argc, char **argv)
 {
@@ -169,6 +172,7 @@ int main(int argc, char **argv)
     pub_ball_final_threshold_ = IT.advertise("/vision_ball_final_threshold", 32);
 
     pub_vision = nh.advertise<master::Vision>("/vision_data", 16);
+    sub_odom = nh.subscribe("/odometry_robot", 8, CllbckSubOdom);
 
     // LoadConfig();
 
@@ -309,7 +313,6 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
             obs_buffer[angles] = PixelToCm(pixel);
             if (frame_yuv_obs.at<unsigned char>(Point(pixel_x, pixel_y)) == 255)
             {
-                // circle(display_obs, Point(pixel_x, pixel_y), 2, Scalar(255, 255, 0), 1);
                 circle(frame_bgr, Point(pixel_x, pixel_y), 2, Scalar(255, 255, 0), 1);
                 break;
             }
@@ -319,6 +322,10 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         }
         if (pixel_x < 0 || pixel_y < 0 || pixel_x >= g_res_x || pixel_y >= g_res_y)
             obs_buffer[angles] = 9999;
+
+        pixel = 0;
+        pixel_x = g_center_cam_x;
+        pixel_y = g_center_cam_y;
 
         mutex_obs_final_threshold.lock();
         while (pixel_x >= 0 && pixel_y >= 0 && pixel_x < g_res_x && pixel_y < g_res_y)
@@ -345,7 +352,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         while (field_angle < 0)
             field_angle += 360;
 
-        obs_buffer[(int)(field_angle * 0.1667)] = obs_buffer[frame_angle];
+        obs[(int)(field_angle * 0.1667)] = obs_buffer[frame_angle];
         limit_buffer[(int)(field_angle * 0.1667)] = limit_buffer[frame_angle];
     }
 
@@ -382,13 +389,13 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     //---Found the ball
     //=================
     if (g_counter_bola_in > 100)
-        ball_status = 1;
+        status_ball = 1;
     else if (g_counter_bola_out > 300)
-        ball_status = 0;
+        status_ball = 0;
 
     //---Update Ball pos
     //==================
-    if (ball_status)
+    if (status_ball)
     {
         //---Get the moments
         //==================
@@ -437,10 +444,6 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
         //---Draw ball pos
         //================
         circle(frame_bgr, mc[largest_contour_index], ball_radius, Scalar(0, 0, 255));
-
-        // printf("Ball pos: %f | %f | %f\n", g_ball_x_on_frame, g_ball_y_on_frame, g_ball_theta_on_frame);
-        // printf("Ball pos: %f | %f | %f\n", g_ball_x_on_field, g_ball_y_on_field, g_ball_theta_on_field);
-        // printf("Ball on frame pos: %f | %f | %f\n", g_ball_x_on_frame, g_ball_y_on_frame, g_ball_theta_on_frame);
     }
 
     //---Draw Line
@@ -474,7 +477,7 @@ void CllbkTim50Hz(const ros::TimerEvent &event)
     msg_vision.ball_on_field_theta = g_ball_theta_on_field;
     msg_vision.ball_on_field_dist = g_ball_dist_on_field;
 
-    msg_vision.ball_status = ball_status;
+    msg_vision.ball_status = status_ball;
 
     for (uint16_t angles = 0; angles < 360; angles += 6)
     {
@@ -512,4 +515,11 @@ void LoadConfig()
     cfg.parseKeyValue("v_min", &yuv_ball_thresh[4]);
     cfg.parseKeyValue("v_max", &yuv_ball_thresh[5]);
     cfg.parseMapEnd();
+}
+
+void CllbckSubOdom(const geometry_msgs::Pose2DConstPtr &msg)
+{
+    g_odom_x = msg->x;
+    g_odom_y = msg->y;
+    g_odom_theta = msg->theta;
 }
